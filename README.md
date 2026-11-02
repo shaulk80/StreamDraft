@@ -15,7 +15,7 @@ Options planned: an in-page download button and a context-menu entry, each switc
 
 ## Building
 
-Needs Node.js 24 LTS and pnpm (`corepack enable`).
+Needs Node.js 26, pnpm 12 (`npm install -g pnpm`) and Firefox (the smoke test starts it headless).
 
 ```powershell
 .\scripts\build.ps1
