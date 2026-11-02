@@ -13,7 +13,6 @@ src/detect/         Network and DOM media detection
 src/formats/        HLS and DASH manifest parsing
 src/engine/         Segment fetching, muxing, OPFS storage, download jobs
 src/extractors/     Site extractors behind one interface (generic first, YouTube later)
-src/ui/             Shared UI pieces for popup and options
 tests/              Vitest unit tests; tests/smoke/ loads the packaged build
 scripts/build.ps1   The one build script, used by developers and CI
 docs/               status, plan, architecture, decisions, brief
@@ -27,9 +26,8 @@ pnpm install --frozen-lockfile        restore
 pnpm run test                         unit tests (one test: pnpm exec vitest run -t "name")
 pnpm run dev:firefox                  WXT dev mode with Firefox
 pnpm run zip:firefox / zip:chrome     packages into .output/
+pnpm run smoke                        extracts the packages, loads the Firefox one in headless Firefox (FIREFOX_BIN to choose a binary)
 ```
-
-The package.json scripts named in `scripts/build.ps1` (`check:licenses`, `typecheck`, `lint`, `test`, `zip:*`, `smoke`) are created in M0.
 
 ## Rules
 
@@ -51,8 +49,7 @@ The package.json scripts named in `scripts/build.ps1` (`check:licenses`, `typech
 ## Environment
 
 - Windows 10. Default shell PowerShell 5.1 (scripts must also run on pwsh 7); Git Bash available. Keep `.ps1` files ASCII.
-- Installed: git 2.33, gh (logged in as shaulk80). NOT installed on 2026-11-02: Node.js, pnpm. Give the install steps (Node 24 LTS via winget, then `corepack enable`); do not install.
-- Do not install software; give the user the install steps.
+- Installed: git 2.33, gh (logged in as shaulk80), Node 26 (`C:\Service\NodeJs`), pnpm 12 (via `npm install -g pnpm`; Node 26 has no corepack), Firefox and Firefox Developer Edition. NOT installed: winget, pwsh 7, WSL. After an install, refresh PATH in the session from the Machine and User environment variables.
 
 ## Gotchas
 
@@ -60,7 +57,11 @@ The package.json scripts named in `scripts/build.ps1` (`check:licenses`, `typech
 - Pin runner images (`windows-2022`, `ubuntu-24.04`), not `-latest`.
 - A called workflow shares `github.workflow` with its caller, so `ci.yml` prefixes its concurrency group with `ci-`.
 - Chrome MV3 background is a service worker (no DOM); Firefox MV3 background is an event page (has DOM). Both can be stopped at any time: keep state in `storage`, not in variables.
-- Firefox add-on ID is fixed in the manifest; changing it creates a different add-on.
+- WXT builds Firefox as Manifest V2 by default; `manifestVersion: 3` is set in `wxt.config.ts`. The output folder must be `.output/firefox-mv3`.
+- TypeScript is pinned to 6.0.x because typescript-eslint does not support 7 yet. Check `pnpm peers check` before upgrading.
+- PowerShell 5.1 turns native stderr (pnpm echoes each script) into errors under `$ErrorActionPreference = 'Stop'`; `build.ps1` relaxes it around native commands.
+- WebDriver cannot navigate to `moz-extension://`; the smoke test opens the popup from browser context (geckodriver `--allow-system-access`).
+- The sources zip is built from the working tree; `zip.excludeSources` keeps `coverage/` and `dist/` out.
 
 ## Definition of done
 
