@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm wxt:*)",
+      "Bash(pnpm exec vitest:*)",
+      "Bash(pnpm exec web-ext lint:*)",
+      "Bash(pnpm exec tsc:*)",
+      "Bash(pnpm exec eslint:*)",
+      "PowerShell(pnpm install:*)",
+      "PowerShell(pnpm run:*)",
+      "PowerShell(pnpm test:*)",
+      "PowerShell(pnpm wxt:*)",
+      "PowerShell(pnpm exec vitest:*)",
+      "PowerShell(pnpm exec web-ext lint:*)",
+      "PowerShell(pnpm exec tsc:*)",
+      "PowerShell(pnpm exec eslint:*)",
+      "PowerShell(.\\scripts\\build.ps1:*)"
+    ]
+  }
+}

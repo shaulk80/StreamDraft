@@ -1,0 +1,20 @@
+# Dependencies and build output
+node_modules/
+.output/
+.wxt/
+dist/
+coverage/
+web-ext-artifacts/
+signed/
+
+# Local and secret files
+.env
+.env.*
+*.log
+.claude/settings.local.json
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
