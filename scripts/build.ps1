@@ -40,7 +40,12 @@ function Invoke-Step {
     )
     Write-Host "=== $Name ===" -ForegroundColor Cyan
     $global:LASTEXITCODE = 0
+    # Windows PowerShell 5.1 turns native stderr output (pnpm echoes each script
+    # to stderr) into terminating errors when the preference is 'Stop'. The exit
+    # code decides success here, so relax it around the native command.
+    $ErrorActionPreference = 'Continue'
     & $Action
+    $ErrorActionPreference = 'Stop'
     if ($LASTEXITCODE -ne 0) {
         Stop-Build "$Name (exit code $LASTEXITCODE)"
     }
@@ -55,7 +60,9 @@ function Invoke-WithRetry {
     )
     for ($i = 1; $i -le $Attempts; $i++) {
         $global:LASTEXITCODE = 0
+        $ErrorActionPreference = 'Continue'
         & $Action
+        $ErrorActionPreference = 'Stop'
         if ($LASTEXITCODE -eq 0) {
             return
         }
@@ -106,6 +113,10 @@ if (Test-Path -LiteralPath $packageDir) {
 }
 New-Item -ItemType Directory -Path $packageDir | Out-Null
 
+# Old zips in .output (other versions) must not leak into the package folder.
+Get-ChildItem -LiteralPath (Join-Path $root '.output') -Filter '*.zip' -File -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+
 Invoke-WithRetry 'Package Firefox' { pnpm run zip:firefox }
 Invoke-WithRetry 'Package Chrome' { pnpm run zip:chrome }
 
@@ -117,6 +128,8 @@ if ($zips.Count -eq 0) {
 foreach ($zip in $zips) {
     Copy-Item -LiteralPath $zip.FullName -Destination $packageDir
 }
+
+Invoke-Step 'Lint the Firefox build with web-ext' { pnpm run lint:addon }
 
 Write-Checksums
 
