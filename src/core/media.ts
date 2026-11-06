@@ -88,3 +88,8 @@ export function downloadFilename(
   });
   return `${name}.${extension}`;
 }
+
+/** What the demo "Download" actions say instead of downloading (M1 only). */
+export function demoDownloadText(filename: string): string {
+  return `Demo only. Would save as "${filename}".`;
+}
