@@ -1,7 +1,7 @@
 import { MOCK_MEDIA } from '../../src/core/mock-media.ts';
 import { PING, type PongPayload } from '../../src/core/messages.ts';
 import type { Result } from '../../src/core/result.ts';
-import { renderMediaList } from '../../src/ui/popup-view.ts';
+import { renderMediaList } from '../../src/ui/media-view.ts';
 import { SettingsStore } from '../../src/ui/settings-store.ts';
 
 async function showBackgroundStatus(statusElement: HTMLElement): Promise<void> {

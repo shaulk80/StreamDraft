@@ -52,7 +52,7 @@ function createProtectedNotice(doc: Document): HTMLElement {
   );
 }
 
-function createDownloadRow(doc: Document, item: MediaItem, settings: Settings): HTMLElement {
+export function createDownloadRow(doc: Document, item: MediaItem, settings: Settings): HTMLElement {
   const row = createElement(doc, 'div', 'actions');
   const picker = createQualityPicker(doc, item, settings.defaultQuality);
   const button = createElement(doc, 'button', 'download', 'Download');
