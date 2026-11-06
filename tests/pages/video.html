@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft test page</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      video { display: block; background: #222; margin: 1rem 0; }
+      .spacer { height: 60vh; }
+    </style>
+  </head>
+  <body>
+    <h1>StreamDraft test page</h1>
+    <p>Each video below should get a "Download" button in its top-right corner (when the setting is on).</p>
+
+    <h2>Normal video</h2>
+    <video id="normal" controls width="640" height="360"></video>
+
+    <h2>Too small (no button expected)</h2>
+    <video id="small" controls width="80" height="45"></video>
+
+    <h2>Added by script after 1.5 seconds</h2>
+    <div id="late-slot"></div>
+
+    <div class="spacer"></div>
+    <h2>Far down the page (scroll to check the button follows)</h2>
+    <video id="low" controls width="480" height="270"></video>
+    <div class="spacer"></div>
+
+    <script>
+      setTimeout(() => {
+        const video = document.createElement('video');
+        video.id = 'late';
+        video.controls = true;
+        video.width = 480;
+        video.height = 270;
+        document.getElementById('late-slot').append(video);
+      }, 1500);
+    </script>
+  </body>
+</html>

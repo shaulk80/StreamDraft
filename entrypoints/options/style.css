@@ -1,0 +1,45 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+main {
+  max-width: 36rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+form {
+  display: grid;
+  gap: 1rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field input[type='text'],
+.field select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+}
+
+small {
+  opacity: 0.75;
+}
+
+#form-status {
+  min-height: 1.25rem;
+  margin: 0;
+}
+
+#form-status.error {
+  color: #c62828;
+}

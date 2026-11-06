@@ -4,6 +4,7 @@ import path from 'node:path';
 import { unzipSync } from 'fflate';
 import { Builder, By, until } from 'selenium-webdriver';
 import * as firefox from 'selenium-webdriver/firefox.js';
+import { startTestPageServer } from '../pages/server.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -104,6 +105,204 @@ async function openInNewTab(driver: firefox.Driver, url: string): Promise<void> 
   await driver.switchTo().window(newHandle);
 }
 
+// The popup tab is open: it must list the four mock videos, flag the protected
+// one, preselect the default quality and answer a click on Download.
+async function checkPopupList(driver: firefox.Driver): Promise<void> {
+  await driver.wait(async () => (await driver.findElements(By.css('#media-list .card'))).length === 4, WAIT_MS);
+
+  const notices = await driver.findElements(By.css('#media-list .notice'));
+  if (notices.length !== 1) {
+    problems.push(`firefox runtime: popup: expected 1 DRM notice, found ${notices.length}`);
+  }
+
+  const buttons = await driver.findElements(By.css('#media-list .download'));
+  if (buttons.length !== 3) {
+    problems.push(`firefox runtime: popup: expected 3 download buttons, found ${buttons.length}`);
+    return;
+  }
+
+  // The second video is the HLS one; the default quality "best" preselects its first option.
+  const picker = (await driver.findElements(By.css('#media-list .quality')))[1];
+  const selected = await picker?.getAttribute('value');
+  if (selected !== '1080p') {
+    problems.push(`firefox runtime: popup: expected 1080p preselected, got "${String(selected)}"`);
+  }
+
+  await buttons[1]?.click();
+  const result = (await driver.findElements(By.css('#media-list .result')))[1];
+  if (!result) {
+    problems.push('firefox runtime: popup: no result line after Download');
+    return;
+  }
+  await driver.wait(until.elementTextContains(result, 'Demo only'), WAIT_MS);
+  console.log(`Firefox runtime: popup lists 4 videos; Download says "${await result.getText()}"`);
+}
+
+// Opens the local test page and checks the overlay on it, then switches the
+// setting off and on again from an options tab to see that it applies live.
+async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  const hostSelector = By.css('#streamdraft-overlay');
+
+  await openInNewTab(driver, pageUrl);
+  const pageHandle = await driver.getWindowHandle();
+
+  // Four videos on the page (one is added after 1.5 s), one overlay each.
+  await driver.wait(async () => (await driver.findElements(hostSelector)).length === 4, WAIT_MS);
+  const hosts = await driver.findElements(hostSelector);
+  const normalShown = await hosts[0]?.isDisplayed();
+  const smallShown = await hosts[1]?.isDisplayed();
+  if (normalShown !== true || smallShown !== false) {
+    problems.push(`firefox runtime: overlay: normal video shown=${String(normalShown)}, small video shown=${String(smallShown)}`);
+    return;
+  }
+
+  const shadow = await hosts[0]?.getShadowRoot();
+  if (!shadow) {
+    problems.push('firefox runtime: overlay: the first overlay has no shadow root');
+    return;
+  }
+  await (await shadow.findElement(By.css('.toggle'))).click();
+  await (await shadow.findElement(By.css('.download'))).click();
+  const result = await shadow.findElement(By.css('.result'));
+  await driver.wait(until.elementTextContains(result, 'Demo only'), WAIT_MS);
+  console.log(`Firefox runtime: overlay panel says "${await result.getText()}"`);
+
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const optionsHandle = await driver.getWindowHandle();
+  const toggle = await driver.wait(until.elementLocated(By.id('in-page-button')), WAIT_MS);
+  const status = driver.findElement(By.id('form-status'));
+  await driver.wait(async () => toggle.isSelected(), WAIT_MS);
+
+  await toggle.click();
+  await driver.wait(until.elementTextContains(status, 'Saved'), WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  await driver.wait(async () => (await driver.findElements(hostSelector)).length === 0, WAIT_MS);
+  console.log('Firefox runtime: overlays disappear when the setting is switched off');
+
+  await driver.switchTo().window(optionsHandle);
+  await toggle.click();
+  await driver.wait(async () => (await toggle.isSelected()) === true, WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  await driver.wait(async () => (await driver.findElements(hostSelector)).length === 4, WAIT_MS);
+  console.log('Firefox runtime: overlays come back when the setting is switched on');
+}
+
+const MENU_LABEL = 'Download video with StreamDraft';
+
+async function inChromeContext<T>(driver: firefox.Driver, script: string, ...args: unknown[]): Promise<T> {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return (await driver.executeScript(script, ...args)) as T;
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+
+const FIND_ENTRY = `
+  const popup = document.getElementById('contentAreaContextMenu');
+  const item = popup && Array.from(popup.querySelectorAll('menuitem, menu'))
+    .find((element) => element.getAttribute('label') === arguments[0] && !element.hidden);
+  return item !== undefined && item !== null;`;
+
+const CHOOSE_ENTRY = `
+  const popup = document.getElementById('contentAreaContextMenu');
+  const item = Array.from(popup.querySelectorAll('menuitem, menu'))
+    .find((element) => element.getAttribute('label') === arguments[0]);
+  popup.activateItem(item);`;
+
+const CLOSE_MENU = `
+  const popup = document.getElementById('contentAreaContextMenu');
+  if (popup) { popup.hidePopup(); }`;
+
+async function openContextMenu(driver: firefox.Driver): Promise<void> {
+  await driver.actions().contextClick(driver.findElement(By.id('normal'))).perform();
+}
+
+// Right-clicks the video and says whether Firefox's menu has our entry; with
+// `choose` it also chooses the entry, otherwise the menu is closed again.
+async function rightClickVideo(driver: firefox.Driver, choose: boolean): Promise<boolean> {
+  // The menu takes a moment to open. Wait longer when the entry is expected.
+  const deadline = Date.now() + (choose ? WAIT_MS : 3000);
+  let found = false;
+
+  await openContextMenu(driver);
+  while (!found && Date.now() < deadline) {
+    await driver.sleep(300);
+    found = await inChromeContext<boolean>(driver, FIND_ENTRY, MENU_LABEL);
+  }
+
+  if (found && choose) {
+    await inChromeContext<void>(driver, CHOOSE_ENTRY, MENU_LABEL);
+    return true;
+  }
+  await inChromeContext<void>(driver, CLOSE_MENU);
+  return found;
+}
+
+// The right-click entry exists, answers a click with the demo toast, and follows
+// the setting (switched off and on again from an options tab, without reloading).
+async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, pageUrl);
+  const pageHandle = await driver.getWindowHandle();
+  await driver.wait(until.elementLocated(By.id('streamdraft-overlay')), WAIT_MS);
+
+  if (!(await rightClickVideo(driver, true))) {
+    problems.push('firefox runtime: context menu: the entry is missing');
+    return;
+  }
+  const toast = await driver.wait(until.elementLocated(By.id('streamdraft-toast')), WAIT_MS);
+  const toastText = await (await (await toast.getShadowRoot()).findElement(By.css('.toast'))).getText();
+  if (!toastText.includes('Demo only')) {
+    problems.push(`firefox runtime: context menu: unexpected toast "${toastText}"`);
+  }
+  console.log(`Firefox runtime: context menu entry answers "${toastText}"`);
+
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const optionsHandle = await driver.getWindowHandle();
+  const toggle = await driver.wait(until.elementLocated(By.id('context-menu')), WAIT_MS);
+  await driver.wait(async () => toggle.isSelected(), WAIT_MS);
+
+  await toggle.click();
+  await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Saved'), WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  if (await rightClickVideo(driver, false)) {
+    problems.push('firefox runtime: context menu: the entry is still there after switching it off');
+  }
+
+  await driver.switchTo().window(optionsHandle);
+  await toggle.click();
+  await driver.wait(async () => (await toggle.isSelected()) === true, WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  if (!(await rightClickVideo(driver, false))) {
+    problems.push('firefox runtime: context menu: the entry did not come back after switching it on');
+  }
+  console.log('Firefox runtime: context menu entry follows the setting');
+}
+
+// Changes a setting on the options page, then opens the page again in a new
+// tab to see that the change was stored, and types a bad template to see the error.
+async function checkOptionsPage(driver: firefox.Driver): Promise<void> {
+  const optionsUrl = `moz-extension://${FIXED_UUID}/options.html`;
+
+  await openInNewTab(driver, optionsUrl);
+  const toggle = await driver.wait(until.elementLocated(By.id('in-page-button')), WAIT_MS);
+  // The form is filled once the settings are loaded, so wait for the default.
+  await driver.wait(async () => toggle.isSelected(), WAIT_MS, 'the in-page button should be on by default');
+  await toggle.click();
+  await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Saved'), WAIT_MS);
+
+  await openInNewTab(driver, optionsUrl);
+  const reopened = await driver.wait(until.elementLocated(By.id('in-page-button')), WAIT_MS);
+  await driver.wait(async () => !(await reopened.isSelected()), WAIT_MS);
+  console.log('Firefox runtime: options page keeps a changed setting');
+
+  const template = driver.findElement(By.id('filename-template'));
+  await template.clear();
+  await template.sendKeys('{nope}');
+  await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Unknown placeholder'), WAIT_MS);
+  console.log('Firefox runtime: options page rejects a bad file name template');
+}
+
 async function checkFirefoxRuntime(zipPath: string): Promise<void> {
   const options = new firefox.Options();
   options.addArguments('-headless');
@@ -136,9 +335,19 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     const status = driver.findElement(By.id('status'));
     await driver.wait(until.elementTextContains(status, 'ready'), WAIT_MS);
     console.log(`Firefox runtime: popup shows "${await status.getText()}"`);
+
+    await checkPopupList(driver);
+    const testPage = await startTestPageServer(0);
+    try {
+      await checkOverlay(driver, testPage.url);
+      await checkContextMenu(driver, testPage.url);
+    } finally {
+      await testPage.close();
+    }
+    await checkOptionsPage(driver);
   } catch (error) {
     console.error(error);
-    problems.push('firefox runtime: the popup did not reach "Background: ready"');
+    problems.push('firefox runtime: a page check failed (see the error above)');
   } finally {
     await driver.quit();
   }

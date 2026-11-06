@@ -12,7 +12,7 @@ export default defineConfig({
   manifest: {
     name: 'StreamDraft',
     description: 'Download videos from the page you are on.',
-    permissions: [],
+    permissions: ['storage', 'contextMenus'],
     browser_specific_settings: {
       gecko: {
         id: 'streamdraft@shaulk80.github.io',

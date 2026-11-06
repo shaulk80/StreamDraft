@@ -10,7 +10,7 @@ export default defineConfig(
     // WXT injects these as auto-imports in entrypoints.
     files: ['entrypoints/**/*.ts'],
     languageOptions: {
-      globals: { defineBackground: 'readonly', browser: 'readonly' },
+      globals: { defineBackground: 'readonly', defineContentScript: 'readonly', browser: 'readonly' },
     },
   },
 );

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { handleMessage, PING } from '../../src/core/messages.ts';
+import { demoDownloadMessage, handleMessage, parseDemoDownloadMessage, PING } from '../../src/core/messages.ts';
 
 describe('handleMessage', () => {
   test('answers a ping with the start time', () => {
@@ -18,5 +18,24 @@ describe('handleMessage', () => {
     const result = handleMessage(message, 42);
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('parseDemoDownloadMessage', () => {
+  test('returns the text of a demo download message', () => {
+    expect(parseDemoDownloadMessage(demoDownloadMessage('Saved as x.mp4'))).toEqual({
+      ok: true,
+      value: 'Saved as x.mp4',
+    });
+  });
+
+  test.each([
+    ['null', null],
+    ['a string', 'show-demo-download'],
+    ['a ping', { type: PING }],
+    ['no text', { type: 'show-demo-download' }],
+    ['a text that is not a string', { type: 'show-demo-download', text: 5 }],
+  ])('rejects %s', (_name, message) => {
+    expect(parseDemoDownloadMessage(message).ok).toBe(false);
   });
 });

@@ -19,6 +19,15 @@ Goal: the owner reviews every screen with mock data before any real logic exists
 
 Done when: popup (list of detected videos, quality picker, download button), in-page button overlay on a test page, context-menu entry, and options page (toggle in-page button, toggle context menu, filename template, default quality) are all clickable with fake data; the owner has reviewed and listed changes; settings persist and apply live.
 
+Tasks (written 2026-11-06, work in this order, one commit per task):
+1. Core model: settings schema with defaults and forgiving validation, filename template check and rendering, media model and the mock videos the screens use (`src/core`, unit tests).
+2. Settings store over `storage.sync` (falls back to `local`) with a change listener, behind a small storage-area interface so it tests without a browser.
+3. Options page: the two toggles, filename template with live preview and error text, default quality; saves on change.
+4. Popup: list of the mock videos for the tab, quality picker per video, download button (fake: shows the filename it would use); empty and unsupported (protected) states.
+5. Content script and a static test page (`tests/pages/`): in-page button overlay in a Shadow DOM over each `<video>`, shown or hidden live by the setting.
+6. Background context-menu entry on video, added or removed live by the setting; click shows the fake download.
+7. Smoke test extended (popup lists mock items, options page loads); `docs/status.md` updated; pull request; owner reviews every screen and lists changes in the PR.
+
 ## M2: detection and direct downloads
 
 Goal: real videos found and downloaded.
