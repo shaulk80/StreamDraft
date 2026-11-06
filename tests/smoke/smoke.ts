@@ -104,6 +104,39 @@ async function openInNewTab(driver: firefox.Driver, url: string): Promise<void> 
   await driver.switchTo().window(newHandle);
 }
 
+// The popup tab is open: it must list the four mock videos, flag the protected
+// one, preselect the default quality and answer a click on Download.
+async function checkPopupList(driver: firefox.Driver): Promise<void> {
+  await driver.wait(async () => (await driver.findElements(By.css('#media-list .card'))).length === 4, WAIT_MS);
+
+  const notices = await driver.findElements(By.css('#media-list .notice'));
+  if (notices.length !== 1) {
+    problems.push(`firefox runtime: popup: expected 1 DRM notice, found ${notices.length}`);
+  }
+
+  const buttons = await driver.findElements(By.css('#media-list .download'));
+  if (buttons.length !== 3) {
+    problems.push(`firefox runtime: popup: expected 3 download buttons, found ${buttons.length}`);
+    return;
+  }
+
+  // The second video is the HLS one; the default quality "best" preselects its first option.
+  const picker = (await driver.findElements(By.css('#media-list .quality')))[1];
+  const selected = await picker?.getAttribute('value');
+  if (selected !== '1080p') {
+    problems.push(`firefox runtime: popup: expected 1080p preselected, got "${String(selected)}"`);
+  }
+
+  await buttons[1]?.click();
+  const result = (await driver.findElements(By.css('#media-list .result')))[1];
+  if (!result) {
+    problems.push('firefox runtime: popup: no result line after Download');
+    return;
+  }
+  await driver.wait(until.elementTextContains(result, 'Demo only'), WAIT_MS);
+  console.log(`Firefox runtime: popup lists 4 videos; Download says "${await result.getText()}"`);
+}
+
 // Changes a setting on the options page, then opens the page again in a new
 // tab to see that the change was stored, and types a bad template to see the error.
 async function checkOptionsPage(driver: firefox.Driver): Promise<void> {
@@ -161,6 +194,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     await driver.wait(until.elementTextContains(status, 'ready'), WAIT_MS);
     console.log(`Firefox runtime: popup shows "${await status.getText()}"`);
 
+    await checkPopupList(driver);
     await checkOptionsPage(driver);
   } catch (error) {
     console.error(error);
