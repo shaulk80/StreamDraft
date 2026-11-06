@@ -4,7 +4,7 @@ Updated: 2026-11-06. Keep this file under 40 lines. History belongs in git and p
 
 ## Now
 
-M1 (clickable UI skeleton, all with mock data) is built on branch `m1`: popup, options page, in-page button, right-click entry; settings persist and apply live. `.\scripts\build.ps1` passes (96 unit tests, Firefox smoke test drives all four screens). Waiting for the pull request review: the owner tries every screen (`pnpm run dev:firefox`, `pnpm run testpage`) and lists changes in the PR. Next: M2 detection and direct downloads.
+M1 (clickable UI skeleton, all with mock data) is built (PR #2): popup, options page, in-page button, right-click entry; settings persist and apply live. `.\scripts\build.ps1` passes (96 unit tests, Firefox smoke test drives all four screens). The owner reviewed every screen by hand in Firefox (2026-11-06): all works as expected, no changes requested. Waiting for the merge. Next: M2 detection and direct downloads.
 
 ## Releases
 
@@ -24,8 +24,8 @@ M1 (clickable UI skeleton, all with mock data) is built on branch `m1`: popup, o
 - CI: `build-windows` (windows-2022, Node 26, pnpm from `packageManager`), `release.yml` for tags and dry runs. Both green on GitHub Actions (CI on `main` and the PR, Release dry run and tag run).
 - Rulesets (active): `protect-main` (no deletion, no force push, pull request required, status checks required); `protect-release-tags` (`v*` cannot be deleted or moved).
 - Verified: GitHub Actions end to end (build, smoke, release with 4 assets, published); release asset hashes match `SHA256SUMS.txt`; on this PC typecheck, lint, 19 unit tests, license check, web-ext lint, packaging, checksums, headless Firefox popup-to-background round trip.
-- Verified by hand: `streamdraft-0.0.1-firefox.zip` installs in Firefox Developer Edition (signatures check off), icon and popup work, no errors.
-- Not verified: Chrome at runtime, the Firefox/Chrome API assumptions in docs/architecture.md, M1 screens looked at by a person (only machine-checked so far).
+- Verified by hand: M1 screens (popup, options, in-page button, right-click entry) reviewed by the owner in Firefox, no changes; `streamdraft-0.0.1-firefox.zip` installs in Firefox Developer Edition (signatures check off), icon and popup work, no errors.
+- Not verified: Chrome at runtime, the Firefox/Chrome API assumptions in docs/architecture.md.
 - Known M1 gaps for the review: no button or toast for videos inside iframes; no overlay in fullscreen; the extension asks for all-sites access (content script on `<all_urls>`).
 
 ## Decisions worth remembering
