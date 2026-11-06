@@ -4,6 +4,7 @@ import path from 'node:path';
 import { unzipSync } from 'fflate';
 import { Builder, By, until } from 'selenium-webdriver';
 import * as firefox from 'selenium-webdriver/firefox.js';
+import { startTestPageServer } from '../pages/server.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -137,6 +138,55 @@ async function checkPopupList(driver: firefox.Driver): Promise<void> {
   console.log(`Firefox runtime: popup lists 4 videos; Download says "${await result.getText()}"`);
 }
 
+// Opens the local test page and checks the overlay on it, then switches the
+// setting off and on again from an options tab to see that it applies live.
+async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  const hostSelector = By.css('#streamdraft-overlay');
+
+  await openInNewTab(driver, pageUrl);
+  const pageHandle = await driver.getWindowHandle();
+
+  // Four videos on the page (one is added after 1.5 s), one overlay each.
+  await driver.wait(async () => (await driver.findElements(hostSelector)).length === 4, WAIT_MS);
+  const hosts = await driver.findElements(hostSelector);
+  const normalShown = await hosts[0]?.isDisplayed();
+  const smallShown = await hosts[1]?.isDisplayed();
+  if (normalShown !== true || smallShown !== false) {
+    problems.push(`firefox runtime: overlay: normal video shown=${String(normalShown)}, small video shown=${String(smallShown)}`);
+    return;
+  }
+
+  const shadow = await hosts[0]?.getShadowRoot();
+  if (!shadow) {
+    problems.push('firefox runtime: overlay: the first overlay has no shadow root');
+    return;
+  }
+  await (await shadow.findElement(By.css('.toggle'))).click();
+  await (await shadow.findElement(By.css('.download'))).click();
+  const result = await shadow.findElement(By.css('.result'));
+  await driver.wait(until.elementTextContains(result, 'Demo only'), WAIT_MS);
+  console.log(`Firefox runtime: overlay panel says "${await result.getText()}"`);
+
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const optionsHandle = await driver.getWindowHandle();
+  const toggle = await driver.wait(until.elementLocated(By.id('in-page-button')), WAIT_MS);
+  const status = driver.findElement(By.id('form-status'));
+  await driver.wait(async () => toggle.isSelected(), WAIT_MS);
+
+  await toggle.click();
+  await driver.wait(until.elementTextContains(status, 'Saved'), WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  await driver.wait(async () => (await driver.findElements(hostSelector)).length === 0, WAIT_MS);
+  console.log('Firefox runtime: overlays disappear when the setting is switched off');
+
+  await driver.switchTo().window(optionsHandle);
+  await toggle.click();
+  await driver.wait(async () => (await toggle.isSelected()) === true, WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  await driver.wait(async () => (await driver.findElements(hostSelector)).length === 4, WAIT_MS);
+  console.log('Firefox runtime: overlays come back when the setting is switched on');
+}
+
 // Changes a setting on the options page, then opens the page again in a new
 // tab to see that the change was stored, and types a bad template to see the error.
 async function checkOptionsPage(driver: firefox.Driver): Promise<void> {
@@ -195,6 +245,12 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     console.log(`Firefox runtime: popup shows "${await status.getText()}"`);
 
     await checkPopupList(driver);
+    const testPage = await startTestPageServer(0);
+    try {
+      await checkOverlay(driver, testPage.url);
+    } finally {
+      await testPage.close();
+    }
     await checkOptionsPage(driver);
   } catch (error) {
     console.error(error);
