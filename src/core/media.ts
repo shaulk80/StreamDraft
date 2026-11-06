@@ -1,4 +1,4 @@
-import type { Quality } from './settings.ts';
+import { renderFilename, type Quality } from './settings.ts';
 
 export type MediaKind = 'direct' | 'hls' | 'dash';
 
@@ -50,4 +50,41 @@ function heightOf(quality: Quality): number {
     return 0;
   }
   return Number.parseInt(quality, 10);
+}
+
+const KILOBYTE = 1024;
+const SIZE_UNITS = ['KB', 'MB', 'GB'] as const;
+
+/** Human-readable size such as "410 MB". Values under 1 KB are shown as bytes. */
+export function formatSize(bytes: number): string {
+  if (bytes < KILOBYTE) {
+    return `${bytes} B`;
+  }
+
+  let value = bytes / KILOBYTE;
+  let unitIndex = 0;
+  while (value >= KILOBYTE && unitIndex < SIZE_UNITS.length - 1) {
+    value /= KILOBYTE;
+    unitIndex += 1;
+  }
+
+  const rounded = value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  return `${rounded} ${SIZE_UNITS[unitIndex]}`;
+}
+
+/** The file name (with extension) a download of `option` would be saved under. */
+export function downloadFilename(
+  item: MediaItem,
+  option: QualityOption,
+  template: string,
+  date: string,
+): string {
+  const extension = option.quality === 'audio' ? 'm4a' : item.container;
+  const name = renderFilename(template, {
+    title: item.title,
+    site: item.site,
+    quality: option.quality,
+    date,
+  });
+  return `${name}.${extension}`;
 }
