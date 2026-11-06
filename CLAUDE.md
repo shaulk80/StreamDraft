@@ -13,7 +13,8 @@ src/detect/         Network and DOM media detection
 src/formats/        HLS and DASH manifest parsing
 src/engine/         Segment fetching, muxing, OPFS storage, download jobs
 src/extractors/     Site extractors behind one interface (generic first, YouTube later)
-tests/              Vitest unit tests; tests/smoke/ loads the packaged build
+src/ui/             Settings store, popup/options views, in-page overlay, context menu (DOM or storage access behind small interfaces)
+tests/              Vitest unit tests; tests/smoke/ loads the packaged build; tests/pages/ is a local test page with videos
 scripts/build.ps1   The one build script, used by developers and CI
 docs/               status, plan, architecture, decisions, brief
 ```
@@ -26,6 +27,7 @@ pnpm install --frozen-lockfile        restore
 pnpm run test                         unit tests (one test: pnpm exec vitest run -t "name")
 pnpm run dev:firefox                  WXT dev mode with Firefox
 pnpm run zip:firefox / zip:chrome     packages into .output/
+pnpm run testpage                     serves tests/pages/video.html on http://127.0.0.1:8123/ to try the overlay and the menu by hand
 pnpm run smoke                        extracts the packages, loads the Firefox one in headless Firefox (FIREFOX_BIN to choose a binary)
 ```
 

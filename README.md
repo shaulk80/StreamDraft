@@ -4,7 +4,7 @@ A browser extension that downloads videos from the page you are on. Firefox is t
 
 ## Status
 
-Project set up, nothing built yet (see `docs/status.md`). Planned for v1: direct video files, HLS and DASH streams, audio-only extraction, and site-specific support starting with YouTube. DRM-protected streams are not supported.
+Early development: the screens (popup, options, in-page button, right-click entry) exist with demo data and nothing is downloaded yet (see `docs/status.md`). Planned for v1: direct video files, HLS and DASH streams, audio-only extraction, and site-specific support starting with YouTube. DRM-protected streams are not supported.
 
 Options planned: an in-page download button and a context-menu entry, each switchable.
 

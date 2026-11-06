@@ -4,7 +4,7 @@ Updated: 2026-11-06. Keep this file under 40 lines. History belongs in git and p
 
 ## Now
 
-M0 is done: merged (PR #1), tagged `v0.0.1`, published as a pre-release (2026-11-06), and the Firefox package installed by hand in Developer Edition (icon, popup, no errors). Next: M1 clickable UI skeleton. Create branch `m1`, write its task list in `docs/plan.md`, then build the mock-data screens.
+M1 (clickable UI skeleton, all with mock data) is built on branch `m1`: popup, options page, in-page button, right-click entry; settings persist and apply live. `.\scripts\build.ps1` passes (96 unit tests, Firefox smoke test drives all four screens). Waiting for the pull request review: the owner tries every screen (`pnpm run dev:firefox`, `pnpm run testpage`) and lists changes in the PR. Next: M2 detection and direct downloads.
 
 ## Releases
 
@@ -25,7 +25,8 @@ M0 is done: merged (PR #1), tagged `v0.0.1`, published as a pre-release (2026-11
 - Rulesets (active): `protect-main` (no deletion, no force push, pull request required, status checks required); `protect-release-tags` (`v*` cannot be deleted or moved).
 - Verified: GitHub Actions end to end (build, smoke, release with 4 assets, published); release asset hashes match `SHA256SUMS.txt`; on this PC typecheck, lint, 19 unit tests, license check, web-ext lint, packaging, checksums, headless Firefox popup-to-background round trip.
 - Verified by hand: `streamdraft-0.0.1-firefox.zip` installs in Firefox Developer Edition (signatures check off), icon and popup work, no errors.
-- Not verified: Chrome at runtime, the Firefox/Chrome API assumptions in docs/architecture.md.
+- Not verified: Chrome at runtime, the Firefox/Chrome API assumptions in docs/architecture.md, M1 screens looked at by a person (only machine-checked so far).
+- Known M1 gaps for the review: no button or toast for videos inside iframes; no overlay in fullscreen; the extension asks for all-sites access (content script on `<all_urls>`).
 
 ## Decisions worth remembering
 
