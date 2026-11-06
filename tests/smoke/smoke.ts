@@ -104,6 +104,30 @@ async function openInNewTab(driver: firefox.Driver, url: string): Promise<void> 
   await driver.switchTo().window(newHandle);
 }
 
+// Changes a setting on the options page, then opens the page again in a new
+// tab to see that the change was stored, and types a bad template to see the error.
+async function checkOptionsPage(driver: firefox.Driver): Promise<void> {
+  const optionsUrl = `moz-extension://${FIXED_UUID}/options.html`;
+
+  await openInNewTab(driver, optionsUrl);
+  const toggle = await driver.wait(until.elementLocated(By.id('in-page-button')), WAIT_MS);
+  // The form is filled once the settings are loaded, so wait for the default.
+  await driver.wait(async () => toggle.isSelected(), WAIT_MS, 'the in-page button should be on by default');
+  await toggle.click();
+  await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Saved'), WAIT_MS);
+
+  await openInNewTab(driver, optionsUrl);
+  const reopened = await driver.wait(until.elementLocated(By.id('in-page-button')), WAIT_MS);
+  await driver.wait(async () => !(await reopened.isSelected()), WAIT_MS);
+  console.log('Firefox runtime: options page keeps a changed setting');
+
+  const template = driver.findElement(By.id('filename-template'));
+  await template.clear();
+  await template.sendKeys('{nope}');
+  await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Unknown placeholder'), WAIT_MS);
+  console.log('Firefox runtime: options page rejects a bad file name template');
+}
+
 async function checkFirefoxRuntime(zipPath: string): Promise<void> {
   const options = new firefox.Options();
   options.addArguments('-headless');
@@ -136,9 +160,11 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     const status = driver.findElement(By.id('status'));
     await driver.wait(until.elementTextContains(status, 'ready'), WAIT_MS);
     console.log(`Firefox runtime: popup shows "${await status.getText()}"`);
+
+    await checkOptionsPage(driver);
   } catch (error) {
     console.error(error);
-    problems.push('firefox runtime: the popup did not reach "Background: ready"');
+    problems.push('firefox runtime: a page check failed (see the error above)');
   } finally {
     await driver.quit();
   }

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="manifest.open_in_tab" content="true" />
+    <title>StreamDraft settings</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>StreamDraft settings</h1>
+
+      <form id="settings-form" autocomplete="off">
+        <label class="row">
+          <input type="checkbox" id="in-page-button" />
+          <span>Show a download button on videos in the page</span>
+        </label>
+
+        <label class="row">
+          <input type="checkbox" id="context-menu" />
+          <span>Add "Download video" to the right-click menu</span>
+        </label>
+
+        <label class="field">
+          <span>File name</span>
+          <input type="text" id="filename-template" spellcheck="false" />
+          <small>
+            Placeholders: <code>{title}</code> <code>{site}</code> <code>{quality}</code> <code>{date}</code>.
+            The extension is added for you.
+          </small>
+          <small>Example: <output id="filename-preview"></output></small>
+        </label>
+
+        <label class="field">
+          <span>Default quality</span>
+          <select id="default-quality"></select>
+        </label>
+
+        <p id="form-status" role="status"></p>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
