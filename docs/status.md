@@ -1,16 +1,16 @@
 # StreamDraft: status
 
-Updated: 2026-11-02. Keep this file under 40 lines. History belongs in git and pull requests, not here.
+Updated: 2026-11-06. Keep this file under 40 lines. History belongs in git and pull requests, not here.
 
 ## Now
 
-M0 walking skeleton is built on branch `m0` and `.\scripts\build.ps1` passes locally (not committed yet). Next: commit, push `m0`, open the PR, watch `build-windows`, then apply the rulesets, merge, dry run and tag `v0.0.1`.
+M0 is done: merged (PR #1), tagged `v0.0.1`, published as a pre-release (2026-11-06), and the Firefox package installed by hand in Developer Edition (icon, popup, no errors). Next: M1 clickable UI skeleton. Create branch `m1`, write its task list in `docs/plan.md`, then build the mock-data screens.
 
 ## Releases
 
 | Version | Date | Assets | Notes |
 |---|---|---|---|
-| (none yet) | | | |
+| v0.0.1 | 2026-11-06 | firefox.zip, chrome.zip, sources.zip, SHA256SUMS.txt | Public pre-release on `a96b6b3` (merge of PR #1). Firefox zip unsigned. Hashes checked by hand and from the public URLs. |
 
 ## Open
 
@@ -21,10 +21,11 @@ M0 walking skeleton is built on branch `m0` and `.\scripts\build.ps1` passes loc
 
 ## How things are set up
 
-- CI: `build-windows` (windows-2022, Node 26, pnpm from `packageManager`), `release.yml` for tags and dry runs.
-- Branch protection: not set up (apply after the first green CI run on the `m0` PR).
-- Verified: on this PC (Windows PowerShell 5.1, Node 26.13, pnpm 12.16, Firefox Developer Edition/Release): typecheck, lint, 19 unit tests, license check, web-ext lint (0 errors, 0 warnings), packaging, checksums, headless Firefox popup-to-background round trip.
-- Not verified: anything on GitHub Actions (pwsh 7, Firefox and geckodriver on the runner), `release.yml`, Chrome at runtime, all Firefox/Chrome API assumptions in docs/architecture.md.
+- CI: `build-windows` (windows-2022, Node 26, pnpm from `packageManager`), `release.yml` for tags and dry runs. Both green on GitHub Actions (CI on `main` and the PR, Release dry run and tag run).
+- Rulesets (active): `protect-main` (no deletion, no force push, pull request required, status checks required); `protect-release-tags` (`v*` cannot be deleted or moved).
+- Verified: GitHub Actions end to end (build, smoke, release with 4 assets, published); release asset hashes match `SHA256SUMS.txt`; on this PC typecheck, lint, 19 unit tests, license check, web-ext lint, packaging, checksums, headless Firefox popup-to-background round trip.
+- Verified by hand: `streamdraft-0.0.1-firefox.zip` installs in Firefox Developer Edition (signatures check off), icon and popup work, no errors.
+- Not verified: Chrome at runtime, the Firefox/Chrome API assumptions in docs/architecture.md.
 
 ## Decisions worth remembering
 
