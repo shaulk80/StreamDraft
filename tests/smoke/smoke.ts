@@ -187,6 +187,98 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
   console.log('Firefox runtime: overlays come back when the setting is switched on');
 }
 
+const MENU_LABEL = 'Download video with StreamDraft';
+
+async function inChromeContext<T>(driver: firefox.Driver, script: string, ...args: unknown[]): Promise<T> {
+  await driver.setContext(firefox.Context.CHROME);
+  try {
+    return (await driver.executeScript(script, ...args)) as T;
+  } finally {
+    await driver.setContext(firefox.Context.CONTENT);
+  }
+}
+
+const FIND_ENTRY = `
+  const popup = document.getElementById('contentAreaContextMenu');
+  const item = popup && Array.from(popup.querySelectorAll('menuitem, menu'))
+    .find((element) => element.getAttribute('label') === arguments[0] && !element.hidden);
+  return item !== undefined && item !== null;`;
+
+const CHOOSE_ENTRY = `
+  const popup = document.getElementById('contentAreaContextMenu');
+  const item = Array.from(popup.querySelectorAll('menuitem, menu'))
+    .find((element) => element.getAttribute('label') === arguments[0]);
+  popup.activateItem(item);`;
+
+const CLOSE_MENU = `
+  const popup = document.getElementById('contentAreaContextMenu');
+  if (popup) { popup.hidePopup(); }`;
+
+async function openContextMenu(driver: firefox.Driver): Promise<void> {
+  await driver.actions().contextClick(driver.findElement(By.id('normal'))).perform();
+}
+
+// Right-clicks the video and says whether Firefox's menu has our entry; with
+// `choose` it also chooses the entry, otherwise the menu is closed again.
+async function rightClickVideo(driver: firefox.Driver, choose: boolean): Promise<boolean> {
+  // The menu takes a moment to open. Wait longer when the entry is expected.
+  const deadline = Date.now() + (choose ? WAIT_MS : 3000);
+  let found = false;
+
+  await openContextMenu(driver);
+  while (!found && Date.now() < deadline) {
+    await driver.sleep(300);
+    found = await inChromeContext<boolean>(driver, FIND_ENTRY, MENU_LABEL);
+  }
+
+  if (found && choose) {
+    await inChromeContext<void>(driver, CHOOSE_ENTRY, MENU_LABEL);
+    return true;
+  }
+  await inChromeContext<void>(driver, CLOSE_MENU);
+  return found;
+}
+
+// The right-click entry exists, answers a click with the demo toast, and follows
+// the setting (switched off and on again from an options tab, without reloading).
+async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, pageUrl);
+  const pageHandle = await driver.getWindowHandle();
+  await driver.wait(until.elementLocated(By.id('streamdraft-overlay')), WAIT_MS);
+
+  if (!(await rightClickVideo(driver, true))) {
+    problems.push('firefox runtime: context menu: the entry is missing');
+    return;
+  }
+  const toast = await driver.wait(until.elementLocated(By.id('streamdraft-toast')), WAIT_MS);
+  const toastText = await (await (await toast.getShadowRoot()).findElement(By.css('.toast'))).getText();
+  if (!toastText.includes('Demo only')) {
+    problems.push(`firefox runtime: context menu: unexpected toast "${toastText}"`);
+  }
+  console.log(`Firefox runtime: context menu entry answers "${toastText}"`);
+
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const optionsHandle = await driver.getWindowHandle();
+  const toggle = await driver.wait(until.elementLocated(By.id('context-menu')), WAIT_MS);
+  await driver.wait(async () => toggle.isSelected(), WAIT_MS);
+
+  await toggle.click();
+  await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Saved'), WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  if (await rightClickVideo(driver, false)) {
+    problems.push('firefox runtime: context menu: the entry is still there after switching it off');
+  }
+
+  await driver.switchTo().window(optionsHandle);
+  await toggle.click();
+  await driver.wait(async () => (await toggle.isSelected()) === true, WAIT_MS);
+  await driver.switchTo().window(pageHandle);
+  if (!(await rightClickVideo(driver, false))) {
+    problems.push('firefox runtime: context menu: the entry did not come back after switching it on');
+  }
+  console.log('Firefox runtime: context menu entry follows the setting');
+}
+
 // Changes a setting on the options page, then opens the page again in a new
 // tab to see that the change was stored, and types a bad template to see the error.
 async function checkOptionsPage(driver: firefox.Driver): Promise<void> {
@@ -248,6 +340,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     const testPage = await startTestPageServer(0);
     try {
       await checkOverlay(driver, testPage.url);
+      await checkContextMenu(driver, testPage.url);
     } finally {
       await testPage.close();
     }

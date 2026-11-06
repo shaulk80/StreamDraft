@@ -1,18 +1,12 @@
-import { MOCK_MEDIA } from '../src/core/mock-media.ts';
+import { DEMO_ITEM } from '../src/core/mock-media.ts';
+import { parseDemoDownloadMessage } from '../src/core/messages.ts';
+import { showToast } from '../src/ui/toast.ts';
 import { OverlayManager } from '../src/ui/overlay-manager.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
-
-// M1: every video gets the same fake item. M2 replaces it with detected media.
-const DEMO_ITEM = MOCK_MEDIA.find((item) => item.id === 'mock-hls');
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
-    if (!DEMO_ITEM) {
-      console.error('StreamDraft: the demo video is missing, no overlay will be shown');
-      return;
-    }
-
     const manager = new OverlayManager(window, DEMO_ITEM);
     const store = new SettingsStore(browser.storage);
 
@@ -25,6 +19,14 @@ export default defineContentScript({
       }
       manager.stop();
     };
+
+    // The context menu entry (background) asks the page to show its demo answer.
+    browser.runtime.onMessage.addListener((message: unknown) => {
+      const demo = parseDemoDownloadMessage(message);
+      if (demo.ok) {
+        showToast(document, demo.value);
+      }
+    });
 
     void store.load().then(apply);
     store.onChange(apply);
