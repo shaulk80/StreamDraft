@@ -64,4 +64,19 @@ describe('downloadFilename', () => {
     expect(option).toBeDefined();
     expect(option && downloadFilename(item, option, template, '2026-11-06')).toBe(expected);
   });
+
+  test.each([
+    ['a plain video file', 'mp4', 'Holiday [original].mp4'],
+    ['a plain audio file', 'mp3', 'Holiday [original].mp3'],
+  ])('%s has no known height, so {quality} says "original"', (_name, container, expected) => {
+    const item: MediaItem = {
+      ...mockItem('mock-direct'),
+      title: 'Holiday',
+      container,
+      qualities: [{ quality: 'best', label: container }],
+    };
+    const [option] = item.qualities;
+
+    expect(option && downloadFilename(item, option, template, '2026-11-06')).toBe(expected);
+  });
 });

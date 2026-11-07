@@ -12,7 +12,9 @@ export default defineConfig({
   manifest: {
     name: 'StreamDraft',
     description: 'Download videos from the page you are on.',
-    permissions: ['storage', 'contextMenus'],
+    permissions: ['storage', 'contextMenus', 'webRequest', 'downloads'],
+    // Detection watches the responses of every site; see docs/decisions/0002-detection-permissions.md.
+    host_permissions: ['<all_urls>'],
     browser_specific_settings: {
       gecko: {
         id: 'streamdraft@shaulk80.github.io',

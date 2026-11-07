@@ -21,6 +21,7 @@
     "lint:addon": "web-ext lint --source-dir .output/firefox-mv3",
     "check:licenses": "node scripts/check-licenses.ts",
     "smoke": "node tests/smoke/smoke.ts",
+    "smoke:chrome": "node tests/smoke/chrome-smoke.ts",
     "testpage": "node tests/pages/server.ts"
   },
   "devDependencies": {

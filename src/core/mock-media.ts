@@ -8,6 +8,7 @@ const MEGABYTE = 1024 * 1024;
  */
 const DIRECT_ITEM: MediaItem = {
   id: 'mock-direct',
+  url: 'https://example.com/media/product-demo.mp4',
   title: 'Product demo',
   site: 'example.com',
   kind: 'direct',
@@ -18,6 +19,7 @@ const DIRECT_ITEM: MediaItem = {
 
 const HLS_ITEM: MediaItem = {
   id: 'mock-hls',
+  url: 'https://example.com/media/keynote/master.m3u8',
   title: 'Conference talk: opening keynote',
   site: 'example.com',
   kind: 'hls',
@@ -33,6 +35,7 @@ const HLS_ITEM: MediaItem = {
 
 const DASH_ITEM: MediaItem = {
   id: 'mock-dash',
+  url: 'https://example.org/media/episode-3/manifest.mpd',
   title: 'Nature documentary, episode 3',
   site: 'example.org',
   kind: 'dash',
@@ -46,6 +49,7 @@ const DASH_ITEM: MediaItem = {
 
 const PROTECTED_ITEM: MediaItem = {
   id: 'mock-protected',
+  url: 'https://example.net/media/premium/manifest.mpd',
   title: 'Premium movie (DRM)',
   site: 'example.net',
   kind: 'dash',
@@ -55,6 +59,3 @@ const PROTECTED_ITEM: MediaItem = {
 };
 
 export const MOCK_MEDIA: readonly MediaItem[] = [DIRECT_ITEM, HLS_ITEM, DASH_ITEM, PROTECTED_ITEM];
-
-/** The item the overlay and the context menu show in M1: every video is this one. */
-export const DEMO_ITEM: MediaItem = HLS_ITEM;

@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { unzipSync } from 'fflate';
 import { Builder, By, until } from 'selenium-webdriver';
 import * as firefox from 'selenium-webdriver/firefox.js';
 import { startTestPageServer } from '../pages/server.ts';
+import { extract, packageDir, readVersion } from './package-files.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -14,12 +14,13 @@ import { startTestPageServer } from '../pages/server.ts';
 // Set SMOKE_SKIP_BROWSER=1 to skip step 2 (for machines without Firefox).
 // Set FIREFOX_BIN to use a specific Firefox binary.
 
+/** What the popup, the overlay and the menu say once the browser has started a download. */
+const SAVING = 'Saving as "StreamDraft test page [original]';
+
 const ADDON_ID = 'streamdraft@shaulk80.github.io';
 const FIXED_UUID = 'f3c2a9e0-6b1d-4d2a-9a55-3b7c1e0d4a10';
 const WAIT_MS = 20_000;
 
-const root = path.resolve(import.meta.dirname, '..', '..');
-const packageDir = path.join(root, 'dist', 'packages');
 const problems: string[] = [];
 
 interface Manifest {
@@ -29,23 +30,6 @@ interface Manifest {
   action?: { default_popup?: string };
   background?: unknown;
   browser_specific_settings?: { gecko?: { id?: string } };
-}
-
-function readVersion(): string {
-  const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { version: string };
-  return packageJson.version;
-}
-
-function extract(zipPath: string, targetDir: string): void {
-  const entries = unzipSync(new Uint8Array(readFileSync(zipPath)));
-  for (const [name, data] of Object.entries(entries)) {
-    if (name.endsWith('/')) {
-      continue;
-    }
-    const target = path.join(targetDir, name);
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, data);
-  }
 }
 
 function checkManifest(label: string, dir: string, version: string, expectGeckoId: boolean): void {
@@ -164,7 +148,7 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
   await (await shadow.findElement(By.css('.toggle'))).click();
   await (await shadow.findElement(By.css('.download'))).click();
   const result = await shadow.findElement(By.css('.result'));
-  await driver.wait(until.elementTextContains(result, 'Demo only'), WAIT_MS);
+  await driver.wait(until.elementTextContains(result, SAVING), WAIT_MS);
   console.log(`Firefox runtime: overlay panel says "${await result.getText()}"`);
 
   await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
@@ -185,6 +169,99 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
   await driver.switchTo().window(pageHandle);
   await driver.wait(async () => (await driver.findElements(hostSelector)).length === 4, WAIT_MS);
   console.log('Firefox runtime: overlays come back when the setting is switched on');
+}
+
+// Opens the detection test page and then the popup for that tab (the popup is
+// opened as a tab of its own, so it is told which tab to look at). The page has
+// four files in its markup (one added by script) and two that only a script
+// fetches: one real video and one too small to be a video.
+const DETECTION_PAGE = 'detect.html';
+const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 'song.mp3'];
+
+// Read in one script call: the popup redraws its list while videos are still being found,
+// and elements fetched one by one would go stale in between.
+async function metaTexts(driver: firefox.Driver): Promise<string[]> {
+  return driver.executeScript<string[]>(
+    "return [...document.querySelectorAll('#media-list .meta')].map((meta) => meta.textContent);",
+  );
+}
+
+async function listedFileNames(driver: firefox.Driver): Promise<string[]> {
+  // The line reads "site · kind · file name".
+  return (await metaTexts(driver)).map((text) => text.split(' · ').pop() ?? '').sort();
+}
+
+async function checkDetection(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${DETECTION_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  // Match patterns ignore the port.
+  const pattern = `http://127.0.0.1/${DETECTION_PAGE}*`;
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${encodeURIComponent(pattern)}`);
+
+  const expected = EXPECTED_FILES.join(', ');
+  try {
+    await driver.wait(async () => (await listedFileNames(driver)).join(', ') === expected, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: detection: expected [${expected}], popup lists [${(await listedFileNames(driver)).join(', ')}]`);
+    return;
+  }
+  console.log(`Firefox runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), not the tiny one`);
+
+  await checkDownload(driver, downloadDir);
+}
+
+// The test server's direct.mp4 is 300 KB of filler. Clicking Download must save it
+// under the template name (page title, "original" for a plain file) in the download folder.
+const DOWNLOADED_NAME = 'StreamDraft detection test page [original].mp4';
+const DOWNLOADED_SIZE = 300 * 1024;
+
+async function checkDownload(driver: firefox.Driver, downloadDir: string): Promise<void> {
+  const names = await listedFileNames(driver);
+  const index = names.indexOf('direct.mp4');
+  const cardIndex = (await metaTexts(driver)).findIndex((text) => text.endsWith('direct.mp4'));
+  const button = (await driver.findElements(By.css('#media-list .download')))[cardIndex];
+  if (index < 0 || !button) {
+    problems.push('firefox runtime: download: the card of direct.mp4 has no Download button');
+    return;
+  }
+
+  await button.click();
+  const result = (await driver.findElements(By.css('#media-list .result')))[cardIndex];
+  if (!result) {
+    problems.push('firefox runtime: download: no result line after Download');
+    return;
+  }
+  await driver.wait(async () => (await result.getText()) !== '', WAIT_MS);
+  const text = await result.getText();
+  if (!text.includes(DOWNLOADED_NAME)) {
+    problems.push(`firefox runtime: download: the popup said "${text}"`);
+    return;
+  }
+
+  const target = path.join(downloadDir, DOWNLOADED_NAME);
+  try {
+    await driver.wait(() => readdirSync(downloadDir).includes(DOWNLOADED_NAME) && statSync(target).size === DOWNLOADED_SIZE, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: download: expected ${DOWNLOADED_NAME} (${DOWNLOADED_SIZE} bytes) in the download folder, found [${readdirSync(downloadDir).join(', ')}]`);
+    return;
+  }
+  console.log(`Firefox runtime: Download saved "${DOWNLOADED_NAME}" (${DOWNLOADED_SIZE} bytes) in the download folder`);
+}
+
+// The overlay button and the menu entry both saved the page's first video (300 KB of
+// filler); the second one got a different name (the browser never overwrites a file).
+function checkTestPageDownloads(downloadDir: string): void {
+  const saved = readdirSync(downloadDir).filter((name) => name.startsWith('StreamDraft test page [original]'));
+  const sizes = saved.map((name) => statSync(path.join(downloadDir, name)).size);
+  if (saved.length !== 2 || sizes.some((size) => size !== DOWNLOADED_SIZE)) {
+    problems.push(`firefox runtime: download: expected two 300 KB files from the test page, found [${saved.join(', ')}] with sizes [${sizes.join(', ')}]`);
+    return;
+  }
+  console.log(`Firefox runtime: the overlay button and the menu entry each saved the video (${saved.join(', ')})`);
 }
 
 const MENU_LABEL = 'Download video with StreamDraft';
@@ -239,7 +316,7 @@ async function rightClickVideo(driver: firefox.Driver, choose: boolean): Promise
   return found;
 }
 
-// The right-click entry exists, answers a click with the demo toast, and follows
+// The right-click entry exists, downloads the video and answers a click with a toast, and follows
 // the setting (switched off and on again from an options tab, without reloading).
 async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promise<void> {
   await openInNewTab(driver, pageUrl);
@@ -252,7 +329,7 @@ async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promis
   }
   const toast = await driver.wait(until.elementLocated(By.id('streamdraft-toast')), WAIT_MS);
   const toastText = await (await (await toast.getShadowRoot()).findElement(By.css('.toast'))).getText();
-  if (!toastText.includes('Demo only')) {
+  if (!toastText.includes(SAVING)) {
     problems.push(`firefox runtime: context menu: unexpected toast "${toastText}"`);
   }
   console.log(`Firefox runtime: context menu entry answers "${toastText}"`);
@@ -307,6 +384,11 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
   const options = new firefox.Options();
   options.addArguments('-headless');
   options.setPreference('extensions.webextensions.uuids', JSON.stringify({ [ADDON_ID]: FIXED_UUID }));
+  // Downloads go to a folder of the test, without a dialog.
+  const downloadDir = mkdtempSync(path.join(tmpdir(), 'streamdraft-downloads-'));
+  options.setPreference('browser.download.folderList', 2);
+  options.setPreference('browser.download.dir', downloadDir);
+  options.setPreference('browser.download.useDownloadDir', true);
   const binary = process.env['FIREFOX_BIN'];
   if (binary) {
     options.setBinary(binary);
@@ -324,7 +406,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     .build()) as firefox.Driver;
   try {
     await driver.installAddon(zipPath, true);
-    await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html`);
+    await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?mock=1`);
 
     const heading = await driver.wait(until.elementLocated(By.css('h1')), WAIT_MS);
     const headingText = await heading.getText();
@@ -341,15 +423,18 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     try {
       await checkOverlay(driver, testPage.url);
       await checkContextMenu(driver, testPage.url);
+      await checkDetection(driver, testPage.url, downloadDir);
     } finally {
       await testPage.close();
     }
     await checkOptionsPage(driver);
+    checkTestPageDownloads(downloadDir);
   } catch (error) {
     console.error(error);
     problems.push('firefox runtime: a page check failed (see the error above)');
   } finally {
     await driver.quit();
+    rmSync(downloadDir, { recursive: true, force: true, maxRetries: 5 });
   }
 }
 

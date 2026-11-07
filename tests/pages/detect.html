@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft detection test page</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      video { display: block; background: #222; margin: 1rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>StreamDraft detection test page</h1>
+    <p>
+      The popup should list five files for this tab: direct.mp4, clip.webm, song.mp3, late.mp4 and
+      hidden-stream (the last one only the network observer can see). The script also fetches
+      tiny.mp4, which is too small to be a video and must not be listed. The files are filler bytes, not playable videos: this page tests detection and
+      the download, not playback.
+    </p>
+
+    <h2>Video with src</h2>
+    <video id="with-src" controls width="480" height="270" preload="none" src="/media/direct.mp4"></video>
+
+    <h2>Video with a source element</h2>
+    <video id="with-source" controls width="480" height="270" preload="none">
+      <source src="/media/clip.webm" type="video/webm" />
+    </video>
+
+    <h2>Audio</h2>
+    <audio id="audio" controls preload="none" src="/media/song.mp3"></audio>
+
+    <h2>Added by script after 1 second</h2>
+    <div id="late-slot"></div>
+
+    <h2>Fetched by script (not in the page)</h2>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      setTimeout(() => {
+        const video = document.createElement('video');
+        video.id = 'late';
+        video.controls = true;
+        video.width = 480;
+        video.height = 270;
+        video.preload = 'none';
+        video.src = '/media/late.mp4';
+        document.getElementById('late-slot').append(video);
+      }, 1000);
+
+      fetch('/media/tiny.mp4');
+
+      // A player reads a file with range requests; the address has no extension.
+      fetch('/media/hidden-stream?id=7', { headers: { Range: 'bytes=0-1023' } })
+        .then((response) => {
+          document.getElementById('fetch-status').textContent = 'fetched, status ' + response.status;
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>

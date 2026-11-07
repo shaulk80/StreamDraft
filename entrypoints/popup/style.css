@@ -75,6 +75,10 @@ footer {
   color: #b26a00;
 }
 
+.result.error {
+  color: #b00020;
+}
+
 footer {
   display: grid;
   gap: 0.1rem;

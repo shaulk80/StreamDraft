@@ -27,7 +27,8 @@ pnpm install --frozen-lockfile        restore
 pnpm run test                         unit tests (one test: pnpm exec vitest run -t "name")
 pnpm run dev:firefox                  WXT dev mode with Firefox
 pnpm run zip:firefox / zip:chrome     packages into .output/
-pnpm run testpage                     serves tests/pages/video.html on http://127.0.0.1:8123/ to try the overlay and the menu by hand
+pnpm run smoke:chrome                 same for the Chrome package in headless Chrome (skipped when no Chrome is found; CHROME_BIN to choose one)
+pnpm run testpage                     serves the test pages on http://127.0.0.1:8123/ (/ overlay, /detect.html detection) for manual testing
 pnpm run smoke                        extracts the packages, loads the Firefox one in headless Firefox (FIREFOX_BIN to choose a binary)
 ```
 
@@ -63,6 +64,9 @@ pnpm run smoke                        extracts the packages, loads the Firefox o
 - TypeScript is pinned to 6.0.x because typescript-eslint does not support 7 yet. Check `pnpm peers check` before upgrading.
 - PowerShell 5.1 turns native stderr (pnpm echoes each script) into errors under `$ErrorActionPreference = 'Stop'`; `build.ps1` relaxes it around native commands.
 - WebDriver cannot navigate to `moz-extension://`; the smoke test opens the popup from browser context (geckodriver `--allow-system-access`).
+- Node runs `.ts` scripts (smoke tests, test page server) in strip-only mode: no parameter properties (`constructor(private x: T)`), enums or namespaces in `tests/smoke/` and `tests/pages/`.
+- Chrome 137 and later ignore `--load-extension`; the Chrome smoke test sends `Extensions.loadUnpacked` over the DevTools port (`--enable-unsafe-extension-debugging`). Chrome ships built-in extensions with a `background.js` too: pick ours by the id that command returns.
+- A popup opened as a tab (smoke tests) is its own `sender.tab`; messages that need the page's tab carry `tabId` explicitly.
 - The sources zip is built from the working tree; `zip.excludeSources` keeps `coverage/` and `dist/` out.
 
 ## Definition of done
@@ -77,5 +81,6 @@ pnpm run smoke                        extracts the packages, loads the Firefox o
 - `docs/status.md` - current state and next step. Start here.
 - `docs/plan.md` - milestones and their Definition of Done.
 - `docs/architecture.md` - components and the open technical questions.
+- `docs/manual-testing.md` - how to load the build and what to click, per milestone. Update it when a feature changes.
 - `docs/decisions/` - one short file per decision.
 - GitHub Issues - bugs and backlog.

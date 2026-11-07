@@ -16,5 +16,6 @@ signed/
 # Editors and OS
 .vscode/
 .idea/
+.vs/
 Thumbs.db
 .DS_Store

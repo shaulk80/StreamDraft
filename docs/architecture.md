@@ -1,6 +1,6 @@
 # StreamDraft: architecture
 
-Status: proposal on 2026-11-02. Nothing here has been built or tested. Items marked **verify** are assumptions about browser APIs that M0 to M3 must check before relying on them.
+Status: proposal on 2026-11-02, partly built. M2 checked in Firefox and Chrome: observe-only `webRequest` with response headers, `storage.session` for the per-tab registry, `downloads.download` with a file name, Shadow DOM overlay. Items marked **verify** are assumptions about browser APIs that M0 to M3 must check before relying on them.
 
 ## Shape
 
