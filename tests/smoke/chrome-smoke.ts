@@ -18,6 +18,7 @@ import { extract, packageDir, readVersion } from './package-files.ts';
 
 const WAIT_MS = 20_000;
 const POLL_MS = 200;
+const LISTENER_SETTLE_MS = 3000;
 const CHROME_LOCATIONS = [
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
@@ -259,6 +260,12 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
       return;
     }
     console.log(`Chrome runtime: background service worker started (extension ${extensionId})`);
+
+    // The worker target exists before Chrome has finished registering its webRequest listeners with
+    // the browser; a page loaded in that gap would be missed by the network observer (on a slow CI
+    // machine the test page's script-only file was, once). A real user installs the extension
+    // before opening pages, so only the test needs the pause.
+    await sleep(LISTENER_SETTLE_MS);
 
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
     await checkOverlay(browser, server.url, downloadDir);
