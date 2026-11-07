@@ -4,6 +4,7 @@ import { PING, type PongPayload } from '../../src/core/messages.ts';
 import type { Result } from '../../src/core/result.ts';
 import type { Settings } from '../../src/core/settings.ts';
 import { MediaRegistry, registryKey } from '../../src/detect/registry.ts';
+import { backgroundDownloadAction, demoDownloadAction, type DownloadAction } from '../../src/ui/download-client.ts';
 import { renderMediaList } from '../../src/ui/media-view.ts';
 import { SettingsStore } from '../../src/ui/settings-store.ts';
 
@@ -20,6 +21,9 @@ async function showBackgroundStatus(statusElement: HTMLElement): Promise<void> {
     statusElement.textContent = 'Background: not responding';
   }
 }
+
+// Nothing is listed without a tab, so this never runs.
+const noDownload: DownloadAction = () => Promise.resolve({ ok: false, error: 'No page to download from.' });
 
 // For review and tests: "?mock=1" shows the four sample videos, "?mock=empty" the
 // screen for a page without videos. Without it the popup shows what was found.
@@ -55,9 +59,10 @@ async function showTabVideos(
 ): Promise<void> {
   const tabId = await resolveTabId();
   if (tabId === undefined) {
-    renderMediaList(list, emptyNotice, [], settings);
+    renderMediaList(list, emptyNotice, [], settings, noDownload);
     return;
   }
+  const download = backgroundDownloadAction((message) => browser.runtime.sendMessage(message), tabId);
 
   const registry = new MediaRegistry(browser.storage.session);
   let shown: string | undefined;
@@ -69,7 +74,7 @@ async function showTabVideos(
       return;
     }
     shown = signature;
-    renderMediaList(list, emptyNotice, items, settings);
+    renderMediaList(list, emptyNotice, items, settings, download);
   };
 
   browser.storage.onChanged.addListener((changes, areaName) => {
@@ -91,7 +96,8 @@ async function showVideos(): Promise<void> {
   const settings = await new SettingsStore(browser.storage).load();
   const mock = mockVideos();
   if (mock) {
-    renderMediaList(list, emptyNotice, mock, settings);
+    renderMediaList(list, emptyNotice, mock, settings, demoDownloadAction(settings));
+    document.getElementById('mode-note')?.removeAttribute('hidden');
     return;
   }
   await showTabVideos(list, emptyNotice, settings);

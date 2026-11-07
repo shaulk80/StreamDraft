@@ -1,13 +1,7 @@
-import {
-  demoDownloadText,
-  downloadFilename,
-  formatSize,
-  pickQuality,
-  type MediaItem,
-  type QualityOption,
-} from '../core/media.ts';
+import { formatSize, pickQuality, type MediaItem, type QualityOption } from '../core/media.ts';
 import type { Settings } from '../core/settings.ts';
 import { fileNameOfAddress } from '../core/url-names.ts';
+import type { DownloadAction } from './download-client.ts';
 
 const KIND_LABELS = { direct: 'Direct file', hls: 'HLS stream', dash: 'DASH stream' } as const;
 
@@ -60,7 +54,12 @@ function createProtectedNotice(doc: Document): HTMLElement {
   );
 }
 
-export function createDownloadRow(doc: Document, item: MediaItem, settings: Settings): HTMLElement {
+export function createDownloadRow(
+  doc: Document,
+  item: MediaItem,
+  settings: Settings,
+  download: DownloadAction,
+): HTMLElement {
   const row = createElement(doc, 'div', 'actions');
   const picker = createQualityPicker(doc, item, settings.defaultQuality);
   const button = createElement(doc, 'button', 'download', 'Download');
@@ -74,10 +73,15 @@ export function createDownloadRow(doc: Document, item: MediaItem, settings: Sett
       result.textContent = 'Pick a quality first.';
       return;
     }
-    const date = new Date().toISOString().slice(0, 10);
-    const name = downloadFilename(item, option, settings.filenameTemplate, date);
-    // M1 only: nothing is downloaded yet. M2 replaces this with the downloads API.
-    result.textContent = demoDownloadText(name);
+
+    // A second click while the browser is starting the download would start it twice.
+    button.disabled = true;
+    result.textContent = '';
+    void download(item, option).then((outcome) => {
+      result.textContent = outcome.ok ? outcome.value : outcome.error;
+      result.classList.toggle('error', !outcome.ok);
+      button.disabled = false;
+    });
   });
 
   row.append(picker, button);
@@ -97,7 +101,7 @@ export function metaText(item: MediaItem): string {
   return details.join(' · ');
 }
 
-function createCard(doc: Document, item: MediaItem, settings: Settings): HTMLElement {
+function createCard(doc: Document, item: MediaItem, settings: Settings, download: DownloadAction): HTMLElement {
   const card = createElement(doc, 'li', 'card');
   card.append(createElement(doc, 'h2', 'title', item.title), createElement(doc, 'p', 'meta', metaText(item)));
 
@@ -106,7 +110,7 @@ function createCard(doc: Document, item: MediaItem, settings: Settings): HTMLEle
     return card;
   }
 
-  card.append(createDownloadRow(doc, item, settings));
+  card.append(createDownloadRow(doc, item, settings, download));
   return card;
 }
 
@@ -116,8 +120,9 @@ export function renderMediaList(
   emptyNotice: HTMLElement,
   items: readonly MediaItem[],
   settings: Settings,
+  download: DownloadAction,
 ): void {
   const doc = list.ownerDocument;
-  list.replaceChildren(...items.map((item) => createCard(doc, item, settings)));
+  list.replaceChildren(...items.map((item) => createCard(doc, item, settings, download)));
   emptyNotice.hidden = items.length > 0;
 }

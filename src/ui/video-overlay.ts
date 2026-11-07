@@ -1,5 +1,6 @@
 import type { MediaItem } from '../core/media.ts';
 import type { Settings } from '../core/settings.ts';
+import type { DownloadAction } from './download-client.ts';
 import { createDownloadRow } from './media-view.ts';
 import { placeOverlay } from './overlay-geometry.ts';
 
@@ -20,12 +21,13 @@ const STYLE = `
 .quality { flex: 1; min-width: 0; font: inherit; }
 .download { font: inherit; }
 .result { margin: 6px 0 0; overflow-wrap: anywhere; }
+.result.error { color: #b00020; }
 `;
 
 /**
  * A "Download" button that floats over one `<video>`. It lives in its own
  * element with a Shadow DOM, so the page's styles cannot change it and it does
- * not change the page's layout. Demo only in M1: the panel shows fake data.
+ * not change the page's layout.
  */
 export class VideoOverlay {
   private readonly host: HTMLElement;
@@ -35,6 +37,7 @@ export class VideoOverlay {
     private readonly video: HTMLVideoElement,
     item: MediaItem,
     settings: Settings,
+    download: DownloadAction,
   ) {
     const doc = video.ownerDocument;
     this.host = doc.createElement('div');
@@ -57,7 +60,7 @@ export class VideoOverlay {
     const title = doc.createElement('p');
     title.className = 'title';
     title.textContent = item.title;
-    this.panel.append(title, createDownloadRow(doc, item, settings));
+    this.panel.append(title, createDownloadRow(doc, item, settings, download));
 
     toggle.addEventListener('click', () => {
       this.panel.hidden = !this.panel.hidden;

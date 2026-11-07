@@ -20,7 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
 /** Storage key under which the settings object is kept. */
 export const SETTINGS_KEY = 'settings';
 
-function isQuality(value: unknown): value is Quality {
+export function isQuality(value: unknown): value is Quality {
   return QUALITIES.includes(value as Quality);
 }
 

@@ -1,9 +1,16 @@
-import { demoDownloadMessage, handleMessage, parseFoundMediaMessage } from '../src/core/messages.ts';
+import {
+  demoDownloadMessage,
+  handleMessage,
+  parseDownloadMediaMessage,
+  parseFoundMediaMessage,
+} from '../src/core/messages.ts';
 import { demoDownloadText, downloadFilename, pickQuality } from '../src/core/media.ts';
 import { DEMO_ITEM } from '../src/core/mock-media.ts';
+import { DownloadService } from '../src/engine/download-service.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
+import { fail } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
@@ -16,6 +23,12 @@ export default defineBackground(() => {
   );
 
   const registry = new MediaRegistry(browser.storage.session);
+  const downloads = new DownloadService({
+    downloads: browser.downloads,
+    listItems: (tabId) => registry.list(tabId),
+    loadSettings: () => store.load(),
+    today: () => new Date().toISOString().slice(0, 10),
+  });
 
   // Listeners are registered right away (not after an await): the browser can
   // stop this script at any time and wakes it for exactly these events.
@@ -28,6 +41,19 @@ export default defineBackground(() => {
       }
       return undefined;
     }
+
+    const download = parseDownloadMediaMessage(message);
+    if (download.ok) {
+      // Only the popup names a tab (it asks about the page behind it, and when it is
+      // opened as a tab of its own, as in the smoke test, `sender.tab` is the popup
+      // itself). A page's content script names none, so its own tab is used.
+      const tabId = download.value.tabId ?? sender.tab?.id;
+      if (tabId === undefined) {
+        return Promise.resolve(fail('The download request names no tab.'));
+      }
+      return downloads.start(tabId, download.value);
+    }
+
     return Promise.resolve(handleMessage(message, startedAt));
   });
 

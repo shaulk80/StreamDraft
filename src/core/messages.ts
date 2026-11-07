@@ -1,3 +1,4 @@
+import { isQuality, type Quality } from './settings.ts';
 import type { MediaCandidate } from './media.ts';
 import { fail, ok, type Result } from './result.ts';
 
@@ -103,4 +104,41 @@ function toCandidate(entry: unknown): MediaCandidate | undefined {
     pageUrl: typeof pageUrl === 'string' ? pageUrl : undefined,
     pageTitle: typeof pageTitle === 'string' ? pageTitle : undefined,
   };
+}
+
+/** Message a popup or page sends to the background to download one of the videos found on a tab. */
+export const DOWNLOAD_MEDIA = 'download-media';
+
+export interface DownloadMediaMessage {
+  type: typeof DOWNLOAD_MEDIA;
+  itemId: string;
+  quality: Quality;
+  /** Needed from the popup, which is not part of a tab; a page's tab is known from the sender. */
+  tabId?: number;
+}
+
+export function downloadMediaMessage(itemId: string, quality: Quality, tabId?: number): DownloadMediaMessage {
+  return { type: DOWNLOAD_MEDIA, itemId, quality, tabId };
+}
+
+/** Returns the request, or an error when `message` is not a valid download message. */
+export function parseDownloadMediaMessage(message: unknown): Result<DownloadMediaMessage> {
+  if (typeof message !== 'object' || message === null) {
+    return fail('Message must be an object.');
+  }
+
+  const { type, itemId, quality, tabId } = message as Record<string, unknown>;
+  if (type !== DOWNLOAD_MEDIA) {
+    return fail('Not a download message.');
+  }
+  if (typeof itemId !== 'string' || itemId === '') {
+    return fail('The download message names no video.');
+  }
+  if (!isQuality(quality)) {
+    return fail('The download message has no valid quality.');
+  }
+  if (tabId !== undefined && !Number.isInteger(tabId)) {
+    return fail('The download message has no valid tab.');
+  }
+  return ok({ type: DOWNLOAD_MEDIA, itemId, quality, tabId: tabId as number | undefined });
 }

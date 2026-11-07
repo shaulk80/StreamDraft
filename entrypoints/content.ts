@@ -1,4 +1,5 @@
 import { DEMO_ITEM } from '../src/core/mock-media.ts';
+import { demoDownloadAction } from '../src/ui/download-client.ts';
 import { foundMediaMessage, parseDemoDownloadMessage } from '../src/core/messages.ts';
 import { DomScanner } from '../src/detect/dom-scanner.ts';
 import { showToast } from '../src/ui/toast.ts';
@@ -8,7 +9,7 @@ import { SettingsStore } from '../src/ui/settings-store.ts';
 export default defineContentScript({
   matches: ['<all_urls>'],
   main() {
-    const manager = new OverlayManager(window, DEMO_ITEM);
+    const manager = new OverlayManager(window, DEMO_ITEM, demoDownloadAction);
     const store = new SettingsStore(browser.storage);
 
     // Both the first load and later changes end up here, so the setting

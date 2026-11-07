@@ -1,5 +1,6 @@
 import type { MediaItem } from '../core/media.ts';
 import type { Settings } from '../core/settings.ts';
+import type { DownloadAction } from './download-client.ts';
 import { VideoOverlay } from './video-overlay.ts';
 
 const REPOSITION_FALLBACK_MS = 1000;
@@ -21,6 +22,7 @@ export class OverlayManager {
   constructor(
     private readonly window: Window & typeof globalThis,
     private readonly item: MediaItem,
+    private readonly createAction: (settings: Settings) => DownloadAction,
   ) {}
 
   get running(): boolean {
@@ -96,7 +98,7 @@ export class OverlayManager {
 
     for (const video of this.window.document.querySelectorAll('video')) {
       if (!this.overlays.has(video)) {
-        this.overlays.set(video, new VideoOverlay(video, this.item, settings));
+        this.overlays.set(video, new VideoOverlay(video, this.item, settings, this.createAction(settings)));
         this.resizes?.observe(video);
       }
     }
