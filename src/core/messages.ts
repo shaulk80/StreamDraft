@@ -142,3 +142,18 @@ export function parseDownloadMediaMessage(message: unknown): Result<DownloadMedi
   }
   return ok({ type: DOWNLOAD_MEDIA, itemId, quality, tabId: tabId as number | undefined });
 }
+
+/**
+ * Message the popup sends to a page's content script to make it look at its videos
+ * again and report all of them (the popup's "Refresh" button). The answer is a
+ * `Result<number>`: how many media files the page has.
+ */
+export const RESCAN_MEDIA = 'rescan-media';
+
+export function rescanMediaMessage(): { type: typeof RESCAN_MEDIA } {
+  return { type: RESCAN_MEDIA };
+}
+
+export function isRescanMediaMessage(message: unknown): boolean {
+  return typeof message === 'object' && message !== null && (message as { type?: unknown }).type === RESCAN_MEDIA;
+}

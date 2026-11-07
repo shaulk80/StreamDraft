@@ -226,7 +226,41 @@ async function checkDetection(driver: firefox.Driver, pageUrl: string, downloadD
   }
   console.log(`Firefox runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), not the tiny one, all named after the page`);
 
+  await checkRefresh(driver);
   await checkDownload(driver, downloadDir);
+}
+
+// The Refresh button must bring back what the page itself has: the saved list is emptied
+// (as if the background had lost it), then Refresh makes the page report its files again.
+// hidden-stream only ever came from the network, so it stays gone: proof the page was scanned.
+const FILES_IN_THE_PAGE = ['clip.webm', 'direct.mp4', 'late.mp4', 'song.mp3'];
+
+async function checkRefresh(driver: firefox.Driver): Promise<void> {
+  const emptied = await driver.executeAsyncScript<string>(
+    `const done = arguments[arguments.length - 1];
+     window.wrappedJSObject.browser.storage.session.clear().then(() => done(''), (error) => done(String(error)));`,
+  );
+  if (emptied !== '') {
+    problems.push(`firefox runtime: refresh: could not empty the saved list: ${emptied}`);
+    return;
+  }
+  await driver.wait(async () => (await listedFileNames(driver)).length === 0, WAIT_MS);
+
+  await driver.findElement(By.id('refresh')).click();
+  const wanted = FILES_IN_THE_PAGE.join(', ');
+  try {
+    await driver.wait(async () => (await listedFileNames(driver)).join(', ') === wanted, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: refresh: expected [${wanted}] after Refresh, popup lists [${(await listedFileNames(driver)).join(', ')}]`);
+    return;
+  }
+  const note = await driver.findElement(By.id('refresh-note')).getText();
+  if (!note.startsWith('Checked the page again. 4 videos listed.')) {
+    problems.push(`firefox runtime: refresh: the note said "${note}"`);
+    return;
+  }
+  console.log(`Firefox runtime: Refresh brought back the page's files after the saved list was emptied ("${note}")`);
 }
 
 // The test server's direct.mp4 is 300 KB of filler. Clicking Download must save it

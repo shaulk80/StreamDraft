@@ -16,6 +16,24 @@ header {
   align-items: baseline;
 }
 
+.header-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: baseline;
+}
+
+#refresh {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.1rem 0.6rem;
+}
+
+#refresh-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
 h1 {
   margin: 0 0 0.5rem;
   font-size: 1.2rem;

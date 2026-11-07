@@ -8,7 +8,7 @@ import { DownloadService } from '../src/engine/download-service.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
-import { fail } from '../src/core/result.ts';
+import { fail, ok } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
@@ -34,10 +34,11 @@ export default defineBackground(() => {
     const found = parseFoundMediaMessage(message);
     if (found.ok) {
       // The sender is a page's content script; its tab is the one the videos belong to.
-      if (sender.tab?.id !== undefined) {
-        void addPageCandidates(registry, sender.tab.id, found.value);
+      if (sender.tab?.id === undefined) {
+        return undefined;
       }
-      return undefined;
+      // Answered after the videos are stored: a page that rescans on request waits for it.
+      return addPageCandidates(registry, sender.tab.id, found.value).then((count) => ok(count));
     }
 
     const download = parseDownloadMediaMessage(message);

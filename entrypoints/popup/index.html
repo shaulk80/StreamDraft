@@ -9,8 +9,12 @@
   <body>
     <header>
       <h1>StreamDraft</h1>
-      <a href="#" id="open-settings">Settings</a>
+      <div class="header-actions">
+        <button type="button" id="refresh" hidden title="Check the page for videos again">Refresh</button>
+        <a href="#" id="open-settings">Settings</a>
+      </div>
     </header>
+    <p id="refresh-note" role="status" hidden></p>
     <ul id="media-list"></ul>
     <p id="empty-notice" hidden>No videos found on this page.</p>
     <footer>

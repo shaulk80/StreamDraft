@@ -24,6 +24,7 @@ const CHROME_LOCATIONS = [
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
 ];
 const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 'song.mp3'];
+const FILES_IN_THE_PAGE = ['clip.webm', 'direct.mp4', 'late.mp4', 'song.mp3'];
 const PAGE_TITLE = 'StreamDraft detection test page';
 const DOWNLOADED_NAME = 'StreamDraft detection test page [original].mp4';
 const OVERLAY_NAME = 'StreamDraft test page [original].mp4';
@@ -165,6 +166,8 @@ async function checkDetectionAndDownload(
   }
   console.log(`Chrome runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), all named after the page`);
 
+  await checkRefresh(popup);
+
   // Click Download on the card of direct.mp4.
   await popup.evaluate(`(() => {
     const cards = [...document.querySelectorAll('#media-list .card')];
@@ -182,6 +185,32 @@ async function checkDetectionAndDownload(
     return;
   }
   await checkSavedFile(downloadDir, DOWNLOADED_NAME, 'popup Download');
+}
+
+// The Refresh button must bring back what the page itself has: the saved list is emptied
+// (as if the background had lost it), then Refresh makes the page report its files again.
+// hidden-stream only ever came from the network, so it stays gone: proof the page was scanned.
+async function checkRefresh(popup: Page): Promise<void> {
+  await popup.evaluate('chrome.storage.session.clear()');
+  const emptied = await waitFor(async () => ((await listedFileNames(popup)) === '' ? true : undefined));
+  if (!emptied) {
+    problems.push('chrome runtime: refresh: the popup still lists files after the saved list was emptied');
+    return;
+  }
+
+  await popup.evaluate("document.getElementById('refresh')?.click()");
+  const wanted = FILES_IN_THE_PAGE.join(', ');
+  const back = await waitFor(async () => ((await listedFileNames(popup)) === wanted ? true : undefined));
+  if (!back) {
+    problems.push(`chrome runtime: refresh: expected [${wanted}] after Refresh, popup lists [${await listedFileNames(popup)}]`);
+    return;
+  }
+  const note = (await popup.evaluate<string>("document.getElementById('refresh-note')?.textContent ?? ''")) ?? '';
+  if (!note.startsWith('Checked the page again. 4 videos listed.')) {
+    problems.push(`chrome runtime: refresh: the note said "${note}"`);
+    return;
+  }
+  console.log(`Chrome runtime: Refresh brought back the page's files after the saved list was emptied ("${note}")`);
 }
 
 async function checkOverlay(browser: CdpConnection, pageUrl: string, downloadDir: string): Promise<void> {

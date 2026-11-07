@@ -5,7 +5,8 @@ const RESCAN_DELAY_MS = 250;
 /** Media events do not bubble; listening on the document in the capture phase still sees them. */
 const MEDIA_EVENTS = ['loadstart', 'loadedmetadata'] as const;
 
-export type CandidateSink = (candidates: MediaCandidate[]) => void;
+/** Takes the newly found files; resolves when they have been handed over. */
+export type CandidateSink = (candidates: MediaCandidate[]) => Promise<void>;
 
 /**
  * Watches a page for `<video>` and `<audio>` files and hands each new address
@@ -35,7 +36,16 @@ export class DomScanner {
       this.window.document.addEventListener(name, this.onMediaEvent, true);
     }
     this.window.addEventListener('pageshow', this.onPageShow);
-    this.scan();
+    void this.scan();
+  }
+
+  /**
+   * Looks at the page again and reports every file in it, also the ones reported before
+   * (the background may have lost them). Resolves with how many files the page has.
+   */
+  rescan(): Promise<number> {
+    this.reported.clear();
+    return this.scan();
   }
 
   stop(): void {
@@ -62,7 +72,7 @@ export class DomScanner {
   private readonly onPageShow = (event: PageTransitionEvent): void => {
     if (event.persisted) {
       this.reported.clear();
-      this.scan();
+      void this.scan();
     }
   };
 
@@ -73,23 +83,24 @@ export class DomScanner {
     }
     this.timer = this.window.setTimeout(() => {
       this.timer = undefined;
-      this.scan();
+      void this.scan();
     }, RESCAN_DELAY_MS);
   }
 
-  private scan(): void {
+  private async scan(): Promise<number> {
     const document = this.window.document;
     const elements = [...document.querySelectorAll<HTMLMediaElement>('video, audio')].map(describeMediaElement);
     const found = candidatesFromElements(elements, { url: this.window.location.href, title: document.title });
 
     const fresh = found.filter((candidate) => !this.reported.has(candidate.url));
     if (fresh.length === 0) {
-      return;
+      return found.length;
     }
 
     for (const candidate of fresh) {
       this.reported.add(candidate.url);
     }
-    this.report(fresh);
+    await this.report(fresh);
+    return found.length;
   }
 }
