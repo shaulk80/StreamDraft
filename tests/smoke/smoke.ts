@@ -187,6 +187,40 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
   console.log('Firefox runtime: overlays come back when the setting is switched on');
 }
 
+// Opens the detection test page and then the popup for that tab (the popup is
+// opened as a tab of its own, so it is told which tab to look at). The page has
+// four files in its markup (one added by script) and two that only a script
+// fetches: one real video and one too small to be a video.
+const DETECTION_PAGE = 'detect.html';
+const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 'song.mp3'];
+
+async function listedFileNames(driver: firefox.Driver): Promise<string[]> {
+  const metas = await driver.findElements(By.css('#media-list .meta'));
+  const texts = await Promise.all(metas.map(async (meta) => meta.getText()));
+  // The line reads "site · kind · file name".
+  return texts.map((text) => text.split(' · ').pop() ?? '').sort();
+}
+
+async function checkDetection(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${DETECTION_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  // Match patterns ignore the port.
+  const pattern = `http://127.0.0.1/${DETECTION_PAGE}*`;
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${encodeURIComponent(pattern)}`);
+
+  const expected = EXPECTED_FILES.join(', ');
+  try {
+    await driver.wait(async () => (await listedFileNames(driver)).join(', ') === expected, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: detection: expected [${expected}], popup lists [${(await listedFileNames(driver)).join(', ')}]`);
+    return;
+  }
+  console.log(`Firefox runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), not the tiny one`);
+}
+
 const MENU_LABEL = 'Download video with StreamDraft';
 
 async function inChromeContext<T>(driver: firefox.Driver, script: string, ...args: unknown[]): Promise<T> {
@@ -341,6 +375,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     try {
       await checkOverlay(driver, testPage.url);
       await checkContextMenu(driver, testPage.url);
+      await checkDetection(driver, testPage.url);
     } finally {
       await testPage.close();
     }
