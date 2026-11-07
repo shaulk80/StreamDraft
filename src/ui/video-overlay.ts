@@ -35,7 +35,7 @@ export class VideoOverlay {
 
   constructor(
     private readonly video: HTMLVideoElement,
-    item: MediaItem,
+    private readonly item: MediaItem,
     settings: Settings,
     download: DownloadAction,
   ) {
@@ -69,6 +69,11 @@ export class VideoOverlay {
     shadow.append(style, toggle, this.panel);
     doc.body.append(this.host);
     this.reposition();
+  }
+
+  /** The id of the video file this overlay downloads; it changes when the page swaps the file. */
+  get itemId(): string {
+    return this.item.id;
   }
 
   /** True while the video is still part of the page. */

@@ -1,7 +1,8 @@
 import { downloadFilename, pickQuality, type MediaItem } from '../core/media.ts';
 import type { DownloadMediaMessage } from '../core/messages.ts';
 import { fail, ok, type Result } from '../core/result.ts';
-import type { Settings } from '../core/settings.ts';
+import type { Quality, Settings } from '../core/settings.ts';
+import { addressWithoutFragment } from '../core/url-names.ts';
 
 /** The part of `browser.downloads` the service uses. Resolves with the download's id. */
 export interface DownloadsLike {
@@ -17,6 +18,9 @@ export interface DownloadServiceDeps {
   today(): string;
 }
 
+const NOT_LISTED = 'This video is no longer listed for the page. Reload the page and try again.';
+const AMBIGUOUS = 'Could not tell which video this is. Use the StreamDraft button in the toolbar.';
+
 export interface StartedDownload {
   filename: string;
   downloadId: number;
@@ -30,12 +34,37 @@ export interface StartedDownload {
 export class DownloadService {
   constructor(private readonly deps: DownloadServiceDeps) {}
 
+  /** Downloads the video the popup or the page's button named, in the quality it chose. */
   async start(tabId: number, request: Pick<DownloadMediaMessage, 'itemId' | 'quality'>): Promise<Result<StartedDownload>> {
     const items = await this.deps.listItems(tabId);
     const item = items.find((candidate) => candidate.id === request.itemId);
     if (!item) {
-      return fail('This video is no longer listed for the page. Reload the page and try again.');
+      return fail(NOT_LISTED);
     }
+    return this.startItem(item, request.quality, await this.deps.loadSettings());
+  }
+
+  /**
+   * Downloads the video behind an address, in the default quality (the context
+   * menu knows the address of the clicked video, not an item). A video the
+   * registry does not know by that address (a `blob:` source) is taken to be
+   * the page's only video, when there is exactly one; otherwise the user is
+   * told to use the popup rather than risk downloading the wrong one.
+   */
+  async startForAddress(tabId: number, address: string | undefined): Promise<Result<StartedDownload>> {
+    const items = await this.deps.listItems(tabId);
+    const id = address === undefined ? undefined : addressWithoutFragment(address);
+    const [only] = items;
+    const item = items.find((candidate) => candidate.id === id) ?? (items.length === 1 ? only : undefined);
+    if (!item) {
+      return fail(items.length === 0 ? 'No video was found on this page.' : AMBIGUOUS);
+    }
+
+    const settings = await this.deps.loadSettings();
+    return this.startItem(item, settings.defaultQuality, settings);
+  }
+
+  private async startItem(item: MediaItem, wanted: Quality, settings: Settings): Promise<Result<StartedDownload>> {
     if (item.protected) {
       return fail('This video is protected by DRM and cannot be downloaded.');
     }
@@ -43,9 +72,8 @@ export class DownloadService {
       return fail('Streamed videos cannot be downloaded yet.');
     }
 
-    const settings = await this.deps.loadSettings();
     const option =
-      item.qualities.find((candidate) => candidate.quality === request.quality) ??
+      item.qualities.find((candidate) => candidate.quality === wanted) ??
       pickQuality(item, settings.defaultQuality);
     if (!option) {
       return fail('This video has no quality to download.');

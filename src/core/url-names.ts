@@ -21,3 +21,18 @@ export function fileNameOfAddress(address: string): string {
   }
   return fileNameOf(new URL(address).pathname);
 }
+
+/**
+ * The address without its fragment ("#t=10"), or undefined when `address` is
+ * not valid. Two links to the same file are the same video; this is the id
+ * the page, the background and the context menu all agree on.
+ */
+export function addressWithoutFragment(address: string): string | undefined {
+  if (!URL.canParse(address)) {
+    return undefined;
+  }
+
+  const url = new URL(address);
+  url.hash = '';
+  return url.href;
+}

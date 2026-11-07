@@ -1,6 +1,6 @@
 import type { MediaCandidate, MediaItem } from '../core/media.ts';
 import { fail, ok, type Result } from '../core/result.ts';
-import { fileNameOf } from '../core/url-names.ts';
+import { addressWithoutFragment, fileNameOf } from '../core/url-names.ts';
 import { detectType, type FileType } from './media-types.ts';
 
 /** Smaller files are tracking clips, ads and previews, not something to download. */
@@ -36,15 +36,15 @@ export function classifyCandidate(candidate: MediaCandidate): Result<MediaItem> 
     return fail('Too small to be a video.');
   }
 
-  url.hash = '';
   return ok(buildItem(url, detected.file, candidate));
 }
 
 function buildItem(url: URL, file: FileType, candidate: MediaCandidate): MediaItem {
   const label = file.audioOnly ? `${file.container.toUpperCase()} audio` : file.container.toUpperCase();
+  const address = addressWithoutFragment(url.href) ?? url.href;
   return {
-    id: url.href,
-    url: url.href,
+    id: address,
+    url: address,
     title: titleOf(url, candidate.pageTitle),
     site: siteOf(url, candidate.pageUrl),
     kind: 'direct',

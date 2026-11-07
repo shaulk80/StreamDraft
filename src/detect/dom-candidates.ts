@@ -9,6 +9,15 @@ export interface MediaElementInfo {
   sources: { src: string; type: string }[];
 }
 
+/** Reads the fields the scan needs from a real element. */
+export function describeMediaElement(element: HTMLMediaElement): MediaElementInfo {
+  return {
+    currentSrc: element.currentSrc,
+    src: element.src,
+    sources: [...element.querySelectorAll('source')].map((source) => ({ src: source.src, type: source.type })),
+  };
+}
+
 export interface PageInfo {
   url: string;
   title: string;

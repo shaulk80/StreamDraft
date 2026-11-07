@@ -59,6 +59,3 @@ const PROTECTED_ITEM: MediaItem = {
 };
 
 export const MOCK_MEDIA: readonly MediaItem[] = [DIRECT_ITEM, HLS_ITEM, DASH_ITEM, PROTECTED_ITEM];
-
-/** The item the overlay and the context menu show in M1: every video is this one. */
-export const DEMO_ITEM: MediaItem = HLS_ITEM;

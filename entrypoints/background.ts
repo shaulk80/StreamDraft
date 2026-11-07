@@ -1,11 +1,9 @@
 import {
-  demoDownloadMessage,
   handleMessage,
   parseDownloadMediaMessage,
   parseFoundMediaMessage,
+  showTextMessage,
 } from '../src/core/messages.ts';
-import { demoDownloadText, downloadFilename, pickQuality } from '../src/core/media.ts';
-import { DEMO_ITEM } from '../src/core/mock-media.ts';
 import { DownloadService } from '../src/engine/download-service.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
@@ -63,7 +61,7 @@ export default defineBackground(() => {
     if (info.menuItemId !== MENU_ITEM_ID || tab?.id === undefined) {
       return;
     }
-    void answerMenuClick(tab.id);
+    void answerMenuClick(tab.id, info.srcUrl);
   });
 
   /** Finds videos from the network traffic of every tab and keeps them per tab. */
@@ -101,19 +99,12 @@ export default defineBackground(() => {
     }
   }
 
-  async function answerMenuClick(tabId: number): Promise<void> {
-    const settings = await store.load();
-    const option = pickQuality(DEMO_ITEM, settings.defaultQuality);
-    if (!option) {
-      console.error('StreamDraft: the demo video has no quality options');
-      return;
-    }
-
-    const date = new Date().toISOString().slice(0, 10);
-    const name = downloadFilename(DEMO_ITEM, option, settings.filenameTemplate, date);
+  /** Downloads the clicked video and tells the page what happened. */
+  async function answerMenuClick(tabId: number, srcUrl: string | undefined): Promise<void> {
+    const started = await downloads.startForAddress(tabId, srcUrl);
+    const text = started.ok ? `Saving as "${started.value.filename}".` : started.error;
     try {
-      // M1 only: nothing is downloaded, the page shows what would happen.
-      await browser.tabs.sendMessage(tabId, demoDownloadMessage(demoDownloadText(name)), { frameId: 0 });
+      await browser.tabs.sendMessage(tabId, showTextMessage(text), { frameId: 0 });
     } catch (error) {
       console.error('StreamDraft: the page did not answer the menu click', error);
     }

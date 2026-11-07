@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import {
-  demoDownloadMessage,
   foundMediaMessage,
   handleMessage,
   MAX_CANDIDATES_PER_MESSAGE,
-  parseDemoDownloadMessage,
+  parseShowTextMessage,
+  showTextMessage,
   parseFoundMediaMessage,
   PING,
 } from '../../src/core/messages.ts';
@@ -29,9 +29,9 @@ describe('handleMessage', () => {
   });
 });
 
-describe('parseDemoDownloadMessage', () => {
-  test('returns the text of a demo download message', () => {
-    expect(parseDemoDownloadMessage(demoDownloadMessage('Saved as x.mp4'))).toEqual({
+describe('parseShowTextMessage', () => {
+  test('returns the text of a show-text message', () => {
+    expect(parseShowTextMessage(showTextMessage('Saved as x.mp4'))).toEqual({
       ok: true,
       value: 'Saved as x.mp4',
     });
@@ -39,12 +39,12 @@ describe('parseDemoDownloadMessage', () => {
 
   test.each([
     ['null', null],
-    ['a string', 'show-demo-download'],
+    ['a string', 'show-text'],
     ['a ping', { type: PING }],
-    ['no text', { type: 'show-demo-download' }],
-    ['a text that is not a string', { type: 'show-demo-download', text: 5 }],
+    ['no text', { type: 'show-text' }],
+    ['a text that is not a string', { type: 'show-text', text: 5 }],
   ])('rejects %s', (_name, message) => {
-    expect(parseDemoDownloadMessage(message).ok).toBe(false);
+    expect(parseShowTextMessage(message).ok).toBe(false);
   });
 });
 

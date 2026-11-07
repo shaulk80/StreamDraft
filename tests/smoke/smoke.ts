@@ -14,6 +14,9 @@ import { startTestPageServer } from '../pages/server.ts';
 // Set SMOKE_SKIP_BROWSER=1 to skip step 2 (for machines without Firefox).
 // Set FIREFOX_BIN to use a specific Firefox binary.
 
+/** What the popup, the overlay and the menu say once the browser has started a download. */
+const SAVING = 'Saving as "StreamDraft test page [original]';
+
 const ADDON_ID = 'streamdraft@shaulk80.github.io';
 const FIXED_UUID = 'f3c2a9e0-6b1d-4d2a-9a55-3b7c1e0d4a10';
 const WAIT_MS = 20_000;
@@ -164,7 +167,7 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
   await (await shadow.findElement(By.css('.toggle'))).click();
   await (await shadow.findElement(By.css('.download'))).click();
   const result = await shadow.findElement(By.css('.result'));
-  await driver.wait(until.elementTextContains(result, 'Demo only'), WAIT_MS);
+  await driver.wait(until.elementTextContains(result, SAVING), WAIT_MS);
   console.log(`Firefox runtime: overlay panel says "${await result.getText()}"`);
 
   await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
@@ -263,6 +266,18 @@ async function checkDownload(driver: firefox.Driver, downloadDir: string): Promi
   console.log(`Firefox runtime: Download saved "${DOWNLOADED_NAME}" (${DOWNLOADED_SIZE} bytes) in the download folder`);
 }
 
+// The overlay button and the menu entry both saved the page's first video (300 KB of
+// filler); the second one got a different name (the browser never overwrites a file).
+function checkTestPageDownloads(downloadDir: string): void {
+  const saved = readdirSync(downloadDir).filter((name) => name.startsWith('StreamDraft test page [original]'));
+  const sizes = saved.map((name) => statSync(path.join(downloadDir, name)).size);
+  if (saved.length !== 2 || sizes.some((size) => size !== DOWNLOADED_SIZE)) {
+    problems.push(`firefox runtime: download: expected two 300 KB files from the test page, found [${saved.join(', ')}] with sizes [${sizes.join(', ')}]`);
+    return;
+  }
+  console.log(`Firefox runtime: the overlay button and the menu entry each saved the video (${saved.join(', ')})`);
+}
+
 const MENU_LABEL = 'Download video with StreamDraft';
 
 async function inChromeContext<T>(driver: firefox.Driver, script: string, ...args: unknown[]): Promise<T> {
@@ -315,7 +330,7 @@ async function rightClickVideo(driver: firefox.Driver, choose: boolean): Promise
   return found;
 }
 
-// The right-click entry exists, answers a click with the demo toast, and follows
+// The right-click entry exists, downloads the video and answers a click with a toast, and follows
 // the setting (switched off and on again from an options tab, without reloading).
 async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promise<void> {
   await openInNewTab(driver, pageUrl);
@@ -328,7 +343,7 @@ async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promis
   }
   const toast = await driver.wait(until.elementLocated(By.id('streamdraft-toast')), WAIT_MS);
   const toastText = await (await (await toast.getShadowRoot()).findElement(By.css('.toast'))).getText();
-  if (!toastText.includes('Demo only')) {
+  if (!toastText.includes(SAVING)) {
     problems.push(`firefox runtime: context menu: unexpected toast "${toastText}"`);
   }
   console.log(`Firefox runtime: context menu entry answers "${toastText}"`);
@@ -427,6 +442,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await testPage.close();
     }
     await checkOptionsPage(driver);
+    checkTestPageDownloads(downloadDir);
   } catch (error) {
     console.error(error);
     problems.push('firefox runtime: a page check failed (see the error above)');

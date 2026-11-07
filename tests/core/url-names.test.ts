@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { decodeForDisplay, fileNameOf, fileNameOfAddress } from '../../src/core/url-names.ts';
+import { addressWithoutFragment, decodeForDisplay, fileNameOf, fileNameOfAddress } from '../../src/core/url-names.ts';
 
 describe('decodeForDisplay', () => {
   test.each<[string, string, string]>([
@@ -28,5 +28,16 @@ describe('fileNameOfAddress', () => {
     ['not an address', 'nonsense', ''],
   ])('%s', (_name, address, expected) => {
     expect(fileNameOfAddress(address)).toBe(expected);
+  });
+});
+
+describe('addressWithoutFragment', () => {
+  test.each<[string, string, string | undefined]>([
+    ['no fragment', 'https://example.com/a.mp4', 'https://example.com/a.mp4'],
+    ['fragment dropped', 'https://example.com/a.mp4#t=5', 'https://example.com/a.mp4'],
+    ['query kept', 'https://example.com/a.mp4?id=1#x', 'https://example.com/a.mp4?id=1'],
+    ['not an address', 'nonsense', undefined],
+  ])('%s', (_name, address, expected) => {
+    expect(addressWithoutFragment(address)).toBe(expected);
   });
 });

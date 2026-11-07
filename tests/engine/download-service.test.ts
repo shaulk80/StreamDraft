@@ -84,3 +84,48 @@ describe('DownloadService.start', () => {
     expect(result).toEqual({ ok: false, error: 'The browser could not start the download.' });
   });
 });
+
+describe('DownloadService.startForAddress', () => {
+  const OTHER: MediaItem = { ...DIRECT, id: 'https://cdn.example.com/v/other.mp4', url: 'https://cdn.example.com/v/other.mp4' };
+
+  test.each<[string, MediaItem[], string | undefined, string]>([
+    ['the item with that address', [DIRECT, OTHER], OTHER.url, OTHER.url],
+    ['the same address with a fragment', [DIRECT, OTHER], `${OTHER.url}#t=5`, OTHER.url],
+    ['the only item when the address is unknown (a blob source)', [DIRECT], 'blob:https://example.com/1234', DIRECT.url],
+    ['the only item when there is no address', [DIRECT], undefined, DIRECT.url],
+  ])('downloads %s', async (_name, items, address, expectedUrl) => {
+    const { service, download } = createService(items);
+
+    const result = await service.startForAddress(7, address);
+
+    expect(result.ok).toBe(true);
+    expect(download).toHaveBeenCalledWith(expect.objectContaining({ url: expectedUrl }));
+  });
+
+  test.each<[string, MediaItem[], string]>([
+    ['nothing was found', [], 'No video was found'],
+    ['several videos and an unknown address', [DIRECT, OTHER], 'Could not tell which video'],
+  ])('refuses when %s', async (_name, items, messagePart) => {
+    const { service, download } = createService(items);
+
+    const result = await service.startForAddress(7, 'blob:https://example.com/1234');
+
+    expect(!result.ok && result.error).toContain(messagePart);
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  test('uses the default quality of the settings', async () => {
+    const twoQualities: MediaItem = {
+      ...DIRECT,
+      qualities: [
+        { quality: '1080p', label: '1080p' },
+        { quality: '480p', label: '480p' },
+      ],
+    };
+    const { service } = createService([twoQualities], { ...DEFAULT_SETTINGS, defaultQuality: '480p', filenameTemplate: '{quality}' });
+
+    const result = await service.startForAddress(7, DIRECT.url);
+
+    expect(result.ok && result.value.filename).toBe('480p.mp4');
+  });
+});

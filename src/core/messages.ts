@@ -26,27 +26,27 @@ export function handleMessage(message: unknown, startedAt: number): Result<PongP
   return ok({ startedAt });
 }
 
-/** Message the background sends to a page to show the demo answer of the context menu entry. */
-export const SHOW_DEMO_DOWNLOAD = 'show-demo-download';
+/** Message the background sends to a page to show a short text in a toast (the answer to a context menu click). */
+export const SHOW_TEXT = 'show-text';
 
-export interface DemoDownloadMessage {
-  type: typeof SHOW_DEMO_DOWNLOAD;
+export interface ShowTextMessage {
+  type: typeof SHOW_TEXT;
   text: string;
 }
 
-export function demoDownloadMessage(text: string): DemoDownloadMessage {
-  return { type: SHOW_DEMO_DOWNLOAD, text };
+export function showTextMessage(text: string): ShowTextMessage {
+  return { type: SHOW_TEXT, text };
 }
 
-/** Returns the text to show, or an error when `message` is not a demo download message. */
-export function parseDemoDownloadMessage(message: unknown): Result<string> {
+/** Returns the text to show, or an error when `message` is not a show-text message. */
+export function parseShowTextMessage(message: unknown): Result<string> {
   if (typeof message !== 'object' || message === null) {
     return fail('Message must be an object.');
   }
 
   const { type, text } = message as { type?: unknown; text?: unknown };
-  if (type !== SHOW_DEMO_DOWNLOAD || typeof text !== 'string') {
-    return fail('Not a demo download message.');
+  if (type !== SHOW_TEXT || typeof text !== 'string') {
+    return fail('Not a show-text message.');
   }
   return ok(text);
 }

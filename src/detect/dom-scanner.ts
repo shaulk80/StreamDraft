@@ -1,5 +1,5 @@
 import type { MediaCandidate } from '../core/media.ts';
-import { candidatesFromElements, type MediaElementInfo } from './dom-candidates.ts';
+import { candidatesFromElements, describeMediaElement } from './dom-candidates.ts';
 
 const RESCAN_DELAY_MS = 250;
 /** Media events do not bubble; listening on the document in the capture phase still sees them. */
@@ -79,7 +79,7 @@ export class DomScanner {
 
   private scan(): void {
     const document = this.window.document;
-    const elements = [...document.querySelectorAll<HTMLMediaElement>('video, audio')].map(describe);
+    const elements = [...document.querySelectorAll<HTMLMediaElement>('video, audio')].map(describeMediaElement);
     const found = candidatesFromElements(elements, { url: this.window.location.href, title: document.title });
 
     const fresh = found.filter((candidate) => !this.reported.has(candidate.url));
@@ -92,12 +92,4 @@ export class DomScanner {
     }
     this.report(fresh);
   }
-}
-
-function describe(element: HTMLMediaElement): MediaElementInfo {
-  return {
-    currentSrc: element.currentSrc,
-    src: element.src,
-    sources: [...element.querySelectorAll('source')].map((source) => ({ src: source.src, type: source.type })),
-  };
 }
