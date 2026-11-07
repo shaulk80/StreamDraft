@@ -56,6 +56,7 @@ const PROTECTED_ITEM: MediaItem = {
   container: 'mp4',
   qualities: [],
   protected: true,
+  protectedReason: 'Widevine DRM',
 };
 
 export const MOCK_MEDIA: readonly MediaItem[] = [DIRECT_ITEM, HLS_ITEM, DASH_ITEM, PROTECTED_ITEM];
