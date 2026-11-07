@@ -80,6 +80,12 @@ export default defineBackground(() => {
       ['responseHeaders'],
     );
     browser.tabs.onRemoved.addListener((tabId) => void registry.clear(tabId));
+    // The page title usually arrives after the first video was found: name the videos after it.
+    browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+      if (changeInfo.title !== undefined) {
+        void registry.retitle(tabId, changeInfo.title);
+      }
+    });
 
     // The toolbar badge follows the registry, whoever added to it.
     const badge = new BadgeController(browser.action);

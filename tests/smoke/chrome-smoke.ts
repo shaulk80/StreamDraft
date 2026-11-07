@@ -23,6 +23,7 @@ const CHROME_LOCATIONS = [
   'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
 ];
 const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 'song.mp3'];
+const PAGE_TITLE = 'StreamDraft detection test page';
 const DOWNLOADED_NAME = 'StreamDraft detection test page [original].mp4';
 const OVERLAY_NAME = 'StreamDraft test page [original].mp4';
 const FILE_SIZE = 300 * 1024;
@@ -149,7 +150,19 @@ async function checkDetectionAndDownload(
     problems.push(`chrome runtime: detection: expected [${expected}], popup lists [${await listedFileNames(popup)}]`);
     return;
   }
-  console.log(`Chrome runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer)`);
+  // A file the network observer finds while the page loads is first named after the address
+  // (the tab has no title yet); the title must catch up.
+  const named = await waitFor(async () => {
+    const titles = await popup.evaluate<string[]>(
+      "[...document.querySelectorAll('#media-list .title')].map((title) => title.textContent)",
+    );
+    return titles?.length && titles.every((title) => title === PAGE_TITLE) ? true : undefined;
+  });
+  if (!named) {
+    problems.push(`chrome runtime: detection: card titles should all be "${PAGE_TITLE}"`);
+    return;
+  }
+  console.log(`Chrome runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), all named after the page`);
 
   // Click Download on the card of direct.mp4.
   await popup.evaluate(`(() => {

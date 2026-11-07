@@ -103,6 +103,48 @@ describe('MediaRegistry', () => {
     expect(ids(await registry.list(1))).toEqual(['b', 'c']);
   });
 
+  test('retitle names every video of the tab after the page, other tabs are untouched', async () => {
+    const registry = new MediaRegistry(new MemoryArea());
+    await registry.add(1, item('a'));
+    await registry.add(1, item('b'));
+    await registry.add(2, item('c'));
+
+    const result = await registry.retitle(1, '  The page  ');
+
+    expect(result.ok && result.value.map((entry) => entry.title)).toEqual(['The page', 'The page']);
+    expect((await registry.list(2))[0]?.title).toBe('c');
+  });
+
+  test.each<[string, string]>([
+    ['the title is already the same', 'a'],
+    ['the title is blank', '   '],
+  ])('retitle writes nothing when %s', async (_name, title) => {
+    const area = new MemoryArea();
+    const registry = new MediaRegistry(area);
+    await registry.add(1, item('a'));
+    const writesBefore = area.writes;
+
+    await registry.retitle(1, title);
+
+    expect(area.writes).toBe(writesBefore);
+  });
+
+  test('retitle of a tab without videos writes nothing', async () => {
+    const area = new MemoryArea();
+
+    await new MediaRegistry(area).retitle(9, 'The page');
+
+    expect(area.writes).toBe(0);
+  });
+
+  test('retitle reports a storage failure instead of throwing', async () => {
+    const area = new MemoryArea();
+    const registry = new MediaRegistry(area);
+    area.failWith = new Error('quota');
+
+    expect((await registry.retitle(1, 'The page')).ok).toBe(false);
+  });
+
   test('clear forgets one tab only', async () => {
     const registry = new MediaRegistry(new MemoryArea());
     await registry.add(1, item('a'));

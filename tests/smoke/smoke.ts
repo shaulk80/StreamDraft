@@ -176,6 +176,7 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
 // four files in its markup (one added by script) and two that only a script
 // fetches: one real video and one too small to be a video.
 const DETECTION_PAGE = 'detect.html';
+const PAGE_TITLE = 'StreamDraft detection test page';
 const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 'song.mp3'];
 
 // Read in one script call: the popup redraws its list while videos are still being found,
@@ -183,6 +184,12 @@ const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 
 async function metaTexts(driver: firefox.Driver): Promise<string[]> {
   return driver.executeScript<string[]>(
     "return [...document.querySelectorAll('#media-list .meta')].map((meta) => meta.textContent);",
+  );
+}
+
+async function cardTitles(driver: firefox.Driver): Promise<string[]> {
+  return driver.executeScript<string[]>(
+    "return [...document.querySelectorAll('#media-list .title')].map((title) => title.textContent);",
   );
 }
 
@@ -208,7 +215,16 @@ async function checkDetection(driver: firefox.Driver, pageUrl: string, downloadD
     problems.push(`firefox runtime: detection: expected [${expected}], popup lists [${(await listedFileNames(driver)).join(', ')}]`);
     return;
   }
-  console.log(`Firefox runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), not the tiny one`);
+  // A file the network observer finds while the page loads is first named after the address
+  // (the tab has no title yet); the title must catch up.
+  try {
+    await driver.wait(async () => (await cardTitles(driver)).every((title) => title === PAGE_TITLE), WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: detection: card titles should all be "${PAGE_TITLE}", they are [${(await cardTitles(driver)).join(' | ')}]`);
+    return;
+  }
+  console.log(`Firefox runtime: detection lists ${EXPECTED_FILES.length} files for the test page (page scan and network observer), not the tiny one, all named after the page`);
 
   await checkDownload(driver, downloadDir);
 }

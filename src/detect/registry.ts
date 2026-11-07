@@ -83,6 +83,28 @@ export class MediaRegistry {
     });
   }
 
+  /**
+   * Gives every video of the tab the page's title. The title often arrives after
+   * the first requests (the tab still shows the address while the page loads), so
+   * videos found early would otherwise be named after the address. A tab without
+   * videos is left alone, and so is a blank title.
+   */
+  retitle(tabId: number, title: string): Promise<Result<MediaItem[]>> {
+    return this.enqueue(async () => {
+      const current = await this.read(tabId);
+      const wanted = title.trim();
+      if (!current.ok || wanted === '') {
+        return current;
+      }
+
+      const retitled = current.value.map((item) => (item.title === wanted ? item : { ...item, title: wanted }));
+      if (retitled.every((item, index) => item === current.value[index])) {
+        return current;
+      }
+      return this.write(tabId, retitled);
+    });
+  }
+
   /** Forgets a tab's videos (the tab navigated or closed). */
   clear(tabId: number): Promise<Result<void>> {
     return this.enqueue(async () => {
