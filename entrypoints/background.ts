@@ -4,6 +4,7 @@ import { DEMO_ITEM } from '../src/core/mock-media.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
+import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
 
@@ -55,6 +56,13 @@ export default defineBackground(() => {
       ['responseHeaders'],
     );
     browser.tabs.onRemoved.addListener((tabId) => void registry.clear(tabId));
+
+    // The toolbar badge follows the registry, whoever added to it.
+    const badge = new BadgeController(browser.action);
+    browser.storage.onChanged.addListener((changes, areaName) => void badge.onStorageChanged(changes, areaName));
+    browser.action.setBadgeBackgroundColor({ color: '#2563eb' }).catch((error: unknown) => {
+      console.error('StreamDraft: could not set the badge colour', error);
+    });
   }
 
   async function lookupTab(tabId: number): Promise<TabInfo | undefined> {

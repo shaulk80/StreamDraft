@@ -14,8 +14,22 @@ export const MAX_ITEMS_PER_TAB = 50;
 
 const KEY_PREFIX = 'streamdraft.tab.';
 
-function keyOf(tabId: number): string {
+/** The storage key of a tab's list, so other parts can watch it with `storage.onChanged`. */
+export function registryKey(tabId: number): string {
   return `${KEY_PREFIX}${tabId}`;
+}
+
+/** The tab a storage key belongs to, or undefined when the key is not a registry key. */
+export function tabIdFromKey(key: string): number | undefined {
+  if (!key.startsWith(KEY_PREFIX)) {
+    return undefined;
+  }
+
+  const digits = key.slice(KEY_PREFIX.length);
+  if (!/^\d+$/.test(digits)) {
+    return undefined;
+  }
+  return Number(digits);
 }
 
 function isStoredItem(value: unknown): value is MediaItem {
@@ -73,7 +87,7 @@ export class MediaRegistry {
   clear(tabId: number): Promise<Result<void>> {
     return this.enqueue(async () => {
       try {
-        await this.area.remove(keyOf(tabId));
+        await this.area.remove(registryKey(tabId));
         return ok(undefined);
       } catch (error) {
         console.error(`StreamDraft: could not clear the videos of tab ${tabId}`, error);
@@ -88,8 +102,8 @@ export class MediaRegistry {
 
   private async read(tabId: number): Promise<Result<MediaItem[]>> {
     try {
-      const stored = await this.area.get(keyOf(tabId));
-      const value = stored[keyOf(tabId)];
+      const stored = await this.area.get(registryKey(tabId));
+      const value = stored[registryKey(tabId)];
       return ok(Array.isArray(value) ? value.filter(isStoredItem) : []);
     } catch (error) {
       console.error(`StreamDraft: could not read the videos of tab ${tabId}`, error);
@@ -99,7 +113,7 @@ export class MediaRegistry {
 
   private async write(tabId: number, items: MediaItem[]): Promise<Result<MediaItem[]>> {
     try {
-      await this.area.set({ [keyOf(tabId)]: items });
+      await this.area.set({ [registryKey(tabId)]: items });
       return ok(items);
     } catch (error) {
       console.error(`StreamDraft: could not save the videos of tab ${tabId}`, error);

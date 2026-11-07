@@ -324,7 +324,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     .build()) as firefox.Driver;
   try {
     await driver.installAddon(zipPath, true);
-    await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html`);
+    await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?mock=1`);
 
     const heading = await driver.wait(until.elementLocated(By.css('h1')), WAIT_MS);
     const headingText = await heading.getText();
