@@ -4,9 +4,13 @@ import { fail, ok, type Result } from '../core/result.ts';
 import type { Quality, Settings } from '../core/settings.ts';
 import { addressWithoutFragment } from '../core/url-names.ts';
 
-/** The part of `browser.downloads` the service uses. Resolves with the download's id. */
+/**
+ * The part of `browser.downloads` the service uses. Resolves with the download's id.
+ * `saveAs` is deliberately not passed: left out, the browser follows the user's own
+ * "ask where to save files" setting; `true` or `false` would override it.
+ */
 export interface DownloadsLike {
-  download(options: { url: string; filename: string; conflictAction: 'uniquify'; saveAs: false }): Promise<number>;
+  download(options: { url: string; filename: string; conflictAction: 'uniquify' }): Promise<number>;
 }
 
 export interface DownloadServiceDeps {
@@ -85,7 +89,7 @@ export class DownloadService {
 
   private async begin(url: string, filename: string): Promise<Result<StartedDownload>> {
     try {
-      const downloadId = await this.deps.downloads.download({ url, filename, conflictAction: 'uniquify', saveAs: false });
+      const downloadId = await this.deps.downloads.download({ url, filename, conflictAction: 'uniquify' });
       return ok({ filename, downloadId });
     } catch (error) {
       console.error(`StreamDraft: the browser refused to download ${url}`, error);

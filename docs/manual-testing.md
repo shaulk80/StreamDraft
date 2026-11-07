@@ -73,6 +73,7 @@ Do each in Firefox, then in Chrome.
 - [ ] File name: change it to `{site} {date}`; the preview updates; the next download is named like `127.0.0.1 2026-11-08.mp4`.
 - [ ] A bad template such as `{nope}` shows an error and is not saved; the old one keeps working.
 - [ ] Default quality: plain files have one quality, so nothing changes for them; check that picking another one does not break a download.
+- [ ] Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
 - [ ] Settings survive closing and reopening the browser (not the temporary Firefox add-on: it is removed on exit).
 
 **Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.

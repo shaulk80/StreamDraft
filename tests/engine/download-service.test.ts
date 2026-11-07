@@ -31,7 +31,7 @@ function createService(items: MediaItem[], settings: Settings = DEFAULT_SETTINGS
 }
 
 describe('DownloadService.start', () => {
-  test('downloads the listed file under the template name, never overwriting', async () => {
+  test('downloads the listed file under the template name, never overwriting, leaving "ask where to save" to the user', async () => {
     const { service, download } = createService([DIRECT]);
 
     const result = await service.start(7, { itemId: DIRECT.id, quality: 'best' });
@@ -41,7 +41,6 @@ describe('DownloadService.start', () => {
       url: DIRECT.url,
       filename: 'Holiday_ day 1 [original].mp4',
       conflictAction: 'uniquify',
-      saveAs: false,
     });
   });
 
