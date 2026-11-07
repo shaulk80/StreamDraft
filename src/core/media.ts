@@ -2,10 +2,34 @@ import { renderFilename, type Quality } from './settings.ts';
 
 export type MediaKind = 'direct' | 'hls' | 'dash';
 
+/**
+ * One rendition of a stream (an HLS variant, a DASH representation), as the
+ * engine needs it to fetch the right segments. Direct files have none.
+ */
+export interface StreamVariant {
+  /** Finds the rendition again in the parsed manifest: a playlist address or a representation id. */
+  variantId: string;
+  /** Bits per second, as the manifest states it. */
+  bandwidth?: number;
+  width?: number;
+  height?: number;
+  /** RFC 6381 codec list such as `avc1.64001f, mp4a.40.2`. */
+  codecs?: string;
+  frameRate?: number;
+  /** The rendition has no video track. */
+  audioOnly?: boolean;
+}
+
 export interface QualityOption {
   quality: Quality;
   label: string;
   sizeBytes?: number;
+  /**
+   * Streams only. For the `audio` option, `variant.audioOnly` tells whether
+   * the audio is a rendition of its own (true) or has to be taken out of a
+   * rendition that carries video too (false).
+   */
+  variant?: StreamVariant;
 }
 
 /** A video found on a page, as the popup, the overlay and the menu show it. */
@@ -20,6 +44,8 @@ export interface MediaItem {
   qualities: QualityOption[];
   /** DRM-protected streams are listed but cannot be downloaded. */
   protected: boolean;
+  /** What protects the stream, in words for the popup (for example "Widevine DRM"); only with `protected`. */
+  protectedReason?: string;
 }
 
 /** What the network observer or the page scanner knows about one possible video. */
