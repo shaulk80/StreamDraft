@@ -4,7 +4,7 @@ Updated: 2026-11-08. Keep this file under 40 lines. History belongs in git and p
 
 ## Now
 
-M1 (clickable UI skeleton, all with mock data) is merged (PR #2): popup, options page, in-page button, right-click entry; settings persist and apply live; the owner reviewed every screen in Firefox, no changes requested. M2 (detection and direct downloads) is built on branch `m2` (pull request open): direct files are found by the network observer and the page scanner, listed per tab in the popup (badge shows the count), and downloaded through the downloads API from the popup, the in-page button and the right-click entry. `.scriptsuild.ps1` passes (266 unit tests, Firefox and Chrome smoke tests). Waiting for the owner's review on the test pages in Firefox and Chrome (`pnpm run testpage`, then `/detect.html`).
+M1 (clickable UI skeleton, all with mock data) is merged (PR #2): popup, options page, in-page button, right-click entry; settings persist and apply live; the owner reviewed every screen in Firefox, no changes requested. M2 (detection and direct downloads) is built on branch `m2` (pull request open): direct files are found by the network observer and the page scanner, listed per tab in the popup (badge shows the count), and downloaded through the downloads API from the popup, the in-page button and the right-click entry. `.\scripts\build.ps1` passes (266 unit tests, Firefox and Chrome smoke tests). Waiting for the owner's review on the test pages in Firefox and Chrome (`pnpm run testpage`, then `/detect.html`).
 
 ## Releases
 
