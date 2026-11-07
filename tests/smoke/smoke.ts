@@ -178,11 +178,17 @@ async function checkOverlay(driver: firefox.Driver, pageUrl: string): Promise<vo
 const DETECTION_PAGE = 'detect.html';
 const EXPECTED_FILES = ['clip.webm', 'direct.mp4', 'hidden-stream', 'late.mp4', 'song.mp3'];
 
+// Read in one script call: the popup redraws its list while videos are still being found,
+// and elements fetched one by one would go stale in between.
+async function metaTexts(driver: firefox.Driver): Promise<string[]> {
+  return driver.executeScript<string[]>(
+    "return [...document.querySelectorAll('#media-list .meta')].map((meta) => meta.textContent);",
+  );
+}
+
 async function listedFileNames(driver: firefox.Driver): Promise<string[]> {
-  const metas = await driver.findElements(By.css('#media-list .meta'));
-  const texts = await Promise.all(metas.map(async (meta) => meta.getText()));
   // The line reads "site · kind · file name".
-  return texts.map((text) => text.split(' · ').pop() ?? '').sort();
+  return (await metaTexts(driver)).map((text) => text.split(' · ').pop() ?? '').sort();
 }
 
 async function checkDetection(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
@@ -215,8 +221,7 @@ const DOWNLOADED_SIZE = 300 * 1024;
 async function checkDownload(driver: firefox.Driver, downloadDir: string): Promise<void> {
   const names = await listedFileNames(driver);
   const index = names.indexOf('direct.mp4');
-  const metas = await driver.findElements(By.css('#media-list .meta'));
-  const cardIndex = (await Promise.all(metas.map(async (meta) => meta.getText()))).findIndex((text) => text.endsWith('direct.mp4'));
+  const cardIndex = (await metaTexts(driver)).findIndex((text) => text.endsWith('direct.mp4'));
   const button = (await driver.findElements(By.css('#media-list .download')))[cardIndex];
   if (index < 0 || !button) {
     problems.push('firefox runtime: download: the card of direct.mp4 has no Download button');
