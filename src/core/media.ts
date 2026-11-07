@@ -84,6 +84,9 @@ export function formatSize(bytes: number): string {
   return `${rounded} ${SIZE_UNITS[unitIndex]}`;
 }
 
+/** What {quality} says for a plain file: its height is unknown, so it is "the file as it is". */
+const ORIGINAL_QUALITY_NAME = 'original';
+
 /** The file name (with extension) a download of `option` would be saved under. */
 export function downloadFilename(
   item: MediaItem,
@@ -95,7 +98,7 @@ export function downloadFilename(
   const name = renderFilename(template, {
     title: item.title,
     site: item.site,
-    quality: option.quality,
+    quality: option.quality === 'best' ? ORIGINAL_QUALITY_NAME : option.quality,
     date,
   });
   return `${name}.${extension}`;
