@@ -36,7 +36,7 @@ Stored in `storage.sync` (falls back to `local`). The background rebuilds the co
 
 ## Key technical questions
 
-1. **Memory for large files.** Plan: write segments to OPFS, mux into an OPFS file, pass a File-backed Blob URL to the downloads API so nothing is held in RAM. **Verify** OPFS in Firefox and Chrome extension pages and that `downloads.download` accepts the Blob URL (M3 spike).
+1. **Memory for large files.** Plan: write segments to OPFS, mux into an OPFS file, pass a File-backed Blob URL to the downloads API so nothing is held in RAM. Verified in the M3 spike (`docs/decisions/0003-storage-and-engine-host.md`): OPFS in extension pages and the Blob URL hand-off work in both browsers at 1.5 GiB with flat memory. Firefox private windows are unchecked.
 2. **Muxing.** HLS (MPEG-TS) to MP4, and DASH video-only plus audio-only into one file. Candidates: mux.js / mp4box.js, or ffmpeg.wasm (large, memory-limited, bundled locally). Decide in the M3 spike; record in `docs/decisions/`.
 3. **Where the engine runs.** Chrome's service worker has no DOM or Blob URLs, so Chrome needs an offscreen document; Firefox's event page has a DOM. Hide this behind one "engine host" interface. **Verify** the Chrome offscreen reasons available.
 4. **Site extractors.** YouTube needs data from the page's own JS (and the player's signature code), so it runs in the MAIN world of the page. **Verify** Firefox MAIN-world content scripts. This is the highest-risk part: it breaks whenever the site changes, may conflict with store reviewer expectations, and sits behind the M4 gate.
