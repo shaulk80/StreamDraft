@@ -230,37 +230,27 @@ async function checkDetection(driver: firefox.Driver, pageUrl: string, downloadD
   await checkDownload(driver, downloadDir);
 }
 
-// The Refresh button must bring back what the page itself has: the saved list is emptied
-// (as if the background had lost it), then Refresh makes the page report its files again.
-// hidden-stream only ever came from the network, so it stays gone: proof the page was scanned.
-const FILES_IN_THE_PAGE = ['clip.webm', 'direct.mp4', 'late.mp4', 'song.mp3'];
-
+// The Refresh button must reach the page's content script and get its answer: the note
+// says so and the list stays complete. (Emptying the saved list first, to see the page's files
+// come back, is done in the Chrome test: Firefox's test scripts cannot reach the extension API.)
 async function checkRefresh(driver: firefox.Driver): Promise<void> {
-  const emptied = await driver.executeAsyncScript<string>(
-    `const done = arguments[arguments.length - 1];
-     window.wrappedJSObject.browser.storage.session.clear().then(() => done(''), (error) => done(String(error)));`,
-  );
-  if (emptied !== '') {
-    problems.push(`firefox runtime: refresh: could not empty the saved list: ${emptied}`);
-    return;
-  }
-  await driver.wait(async () => (await listedFileNames(driver)).length === 0, WAIT_MS);
-
   await driver.findElement(By.id('refresh')).click();
-  const wanted = FILES_IN_THE_PAGE.join(', ');
+  const note = driver.findElement(By.id('refresh-note'));
   try {
-    await driver.wait(async () => (await listedFileNames(driver)).join(', ') === wanted, WAIT_MS);
+    await driver.wait(until.elementTextContains(note, 'Checked the page again.'), WAIT_MS);
   } catch (error) {
     console.error(error);
-    problems.push(`firefox runtime: refresh: expected [${wanted}] after Refresh, popup lists [${(await listedFileNames(driver)).join(', ')}]`);
+    problems.push(`firefox runtime: refresh: the note said "${await note.getText()}"`);
     return;
   }
-  const note = await driver.findElement(By.id('refresh-note')).getText();
-  if (!note.startsWith('Checked the page again. 4 videos listed.')) {
-    problems.push(`firefox runtime: refresh: the note said "${note}"`);
+
+  const text = await note.getText();
+  const listed = (await listedFileNames(driver)).join(', ');
+  if (!text.includes(`${EXPECTED_FILES.length} videos listed.`) || listed !== EXPECTED_FILES.join(', ')) {
+    problems.push(`firefox runtime: refresh: note "${text}", popup lists [${listed}]`);
     return;
   }
-  console.log(`Firefox runtime: Refresh brought back the page's files after the saved list was emptied ("${note}")`);
+  console.log(`Firefox runtime: Refresh reached the page and kept the list complete ("${text}")`);
 }
 
 // The test server's direct.mp4 is 300 KB of filler. Clicking Download must save it
