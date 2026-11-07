@@ -1,0 +1,99 @@
+# StreamDraft: manual testing
+
+For the owner's hands-on review of a milestone. The smoke tests (`pnpm run smoke`, `pnpm run smoke:chrome`) already check the main paths in headless browsers (list below); this file is for looking at the real thing: how it looks, how it feels, and what a user would hit. Add a section per milestone and keep the checklists short.
+
+## 1. Get a build
+
+```
+pnpm install --frozen-lockfile
+pnpm run zip:firefox
+pnpm run zip:chrome
+```
+
+(`.\scripts\build.ps1` does this too, plus all checks.) The unpacked builds are `.output/firefox-mv3` and `.output/chrome-mv3`.
+
+## 2. Load it
+
+**Firefox** (Developer Edition or normal Firefox):
+1. Open `about:debugging#/runtime/this-firefox`.
+2. "Load Temporary Add-on", pick `.output/firefox-mv3/manifest.json`. It stays until Firefox closes.
+3. Pin the toolbar button if you do not see it (puzzle-piece menu, then the gear next to StreamDraft).
+4. If detection finds nothing, open `about:addons`, StreamDraft, Permissions, and check that access to all websites is on.
+
+To try the packaged zip instead (as a user would get it): Developer Edition, `xpinstall.signatures.required` set to `false` in `about:config`, then `about:addons`, gear, "Install Add-on From File", pick `dist/packages/streamdraft-<version>-firefox.zip`.
+
+**Chrome**:
+1. Open `chrome://extensions`, switch on "Developer mode".
+2. "Load unpacked", pick `.output/chrome-mv3`.
+3. Pin the toolbar button (puzzle-piece menu).
+4. After you rebuild, press the reload icon on the extension card and reload the test page.
+
+## 3. Start the test pages
+
+```
+pnpm run testpage
+```
+
+Leave it running. Two pages, both on `http://127.0.0.1:8123/`:
+
+| Page | Address | For |
+|---|---|---|
+| Overlay page | `/` | the in-page button and the right-click entry |
+| Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
+
+The media files are filler bytes with the right content type. They do not play (the player shows an error), but they download. Sizes: `direct.mp4` 300 KB, `clip.webm` 250 KB, `song.mp3` 200 KB, `late.mp4` 220 KB, `hidden-stream` 400 KB, `tiny.mp4` 2 KB.
+
+Downloads go to your normal download folder. The browser never overwrites: a second download of the same name gets `(1)`.
+
+## 4. M2 checklist: detection and downloads
+
+Do each in Firefox, then in Chrome.
+
+**Detection page** (`/detect.html`):
+- [ ] The toolbar badge counts up to 5 within about 2 seconds (the last file is added by the page after 1 second).
+- [ ] The popup lists 5 cards: `clip.webm`, `direct.mp4`, `hidden-stream`, `late.mp4`, `song.mp3`. Every card is titled "StreamDraft detection test page" (none named after the address). Each card has the line `127.0.0.1 · Direct file · <file name>`, a quality list with one entry (e.g. "MP4 (300 KB)"), a Download button. With 5 cards the list scrolls inside the popup (a scrollbar next to the cards); the popup itself has no scrollbar, and no horizontal one.
+- [ ] `tiny.mp4` is not listed (the page fetches it, but it is too small).
+- [ ] `hidden-stream` is listed although it is not in the page (only the network observer sees it).
+- [ ] Download on `direct.mp4`: the card says `Saving as "StreamDraft detection test page [original].mp4".` and the file appears in the download folder with 300 KB. Try one more card; `hidden-stream` saves as `... [original].mp4`.
+- [ ] Reload the page: the list and the badge reset and fill again.
+- [ ] "Refresh" button (top of the popup, next to Settings): click it. A line appears under the title: "Checked the page again. N videos listed." and the list is redrawn (quality choices and result lines reset). It does not find a file the network observer missed earlier (that traffic is gone), but it re-reports everything the page itself contains. If you ever see a missing video again, note what the page was doing (just loaded, scrolled, a video added by script) and whether Refresh brought it back.
+- [ ] Refresh on a page the extension cannot reach (for example a tab opened before you loaded the extension, or `about:debugging`): the line says it could not check the page and shows the saved list.
+- [ ] Open the popup while the page is still loading: the list grows live.
+- [ ] Open `/` in the same tab: the badge and the list change to that page's files.
+- [ ] A page without videos (for example the options page): the popup says "No videos found on this page." and there is no badge.
+
+**Overlay page** (`/`):
+- [ ] The video without a file at the top has no button. The tiny 80 x 45 video has no button. The three normal videos have a "Download" button in the top-right corner, including the one added after 1.5 seconds.
+- [ ] Scroll down: the button of the far-down video follows it, and buttons of videos scrolled out of view disappear.
+- [ ] Click the button, then Download in the small panel: it says `Saving as "StreamDraft test page [original].mp4".` (or the song/late name for the others) and the file is saved.
+- [ ] Right-click a video: the menu has "Download video with StreamDraft". Choosing it shows a toast and saves the file. The toast is a small dark box at the bottom right of the page with the same `Saving as ...` text; it stays 5 seconds and disappears. If the browser's "ask where to save" dialog is on, the toast may only appear after you close the dialog, so turn that setting off for this check.
+- [ ] Right-click a video that has no file (the one at the top): the entry may show; choosing it says it could not tell which video this is, or downloads the only video; it must not download a wrong file.
+
+**Options** (toolbar button, Settings):
+- [ ] Untick "Show a download button on videos in the page" while the overlay page is open: the buttons vanish without reloading the page; switch on: they come back.
+- [ ] Untick 'Add "Download video" to the right-click menu': the right-click entry is gone; tick it: it is back.
+- [ ] File name: change it to `{site} {date}`; the line "Example: ..." under the File name field updates as you type, showing the name a sample video would get (for `{site} {date}` something like `example.com 2026-11-08.mp4`); the next download is named like `127.0.0.1 2026-11-08.mp4`.
+- [ ] A bad template such as `{nope}` shows an error and is not saved; the old one keeps working.
+- [ ] Default quality: plain files have one quality, so nothing changes for them; check that picking another one does not break a download.
+- [ ] Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
+- [ ] Settings survive closing and reopening the browser (not the temporary Firefox add-on: it is removed on exit).
+
+**Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
+
+## 5. Known gaps (do not report again)
+
+- The in-page button appears only for a video whose own address is a recognisable media file. A `blob:` stream or an address without extension and type gets no button; the popup still lists what the network observer saw.
+- No button or toast for videos inside iframes; no button in fullscreen.
+- Downloads do not send the page's `Referer`: hosts that check it refuse.
+- A download that fails after it started (server error) is not reported yet (M6).
+- Streams (HLS, DASH) and protected videos are not downloaded (M3 / never). The popup says so on the sample cards.
+- The extension asks for access to all sites (detection needs it; see `docs/decisions/0002-detection-permissions.md`).
+- The right-click entry has not been run in Chrome by the automated tests (headless Chrome cannot operate the menu): check it by hand there.
+
+## 6. What the automated tests already cover
+
+So you can skip it, or look only at how it feels:
+
+- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; options page keeps a setting and rejects a bad template.
+- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name.
+- Not covered by any test: how it looks, the toolbar badge, the right-click entry in Chrome, loading the way a user does (Firefox signed install, Chrome Load unpacked).

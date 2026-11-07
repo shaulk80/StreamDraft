@@ -12,20 +12,26 @@
   </head>
   <body>
     <h1>StreamDraft test page</h1>
-    <p>Each video below should get a "Download" button in its top-right corner (when the setting is on).</p>
+    <p>
+      Each video below should get a "Download" button in its top-right corner (when the setting is on).
+      The files are filler bytes, not playable videos. Right-click a video and choose "Download video with
+      StreamDraft" to save it too.
+    </p>
+    <h2>Video without a file (no button expected)</h2>
+    <video id="empty" controls width="320" height="180"></video>
 
     <h2>Normal video</h2>
-    <video id="normal" controls width="640" height="360"></video>
+    <video id="normal" controls preload="none" width="640" height="360" src="/media/direct.mp4"></video>
 
     <h2>Too small (no button expected)</h2>
-    <video id="small" controls width="80" height="45"></video>
+    <video id="small" controls preload="none" width="80" height="45" src="/media/clip.webm"></video>
 
     <h2>Added by script after 1.5 seconds</h2>
     <div id="late-slot"></div>
 
     <div class="spacer"></div>
     <h2>Far down the page (scroll to check the button follows)</h2>
-    <video id="low" controls width="480" height="270"></video>
+    <video id="low" controls preload="none" width="480" height="270" src="/media/song.mp3"></video>
     <div class="spacer"></div>
 
     <script>
@@ -35,6 +41,8 @@
         video.controls = true;
         video.width = 480;
         video.height = 270;
+        video.preload = 'none';
+        video.src = '/media/late.mp4';
         document.getElementById('late-slot').append(video);
       }, 1500);
     </script>

@@ -11,6 +11,8 @@ export interface QualityOption {
 /** A video found on a page, as the popup, the overlay and the menu show it. */
 export interface MediaItem {
   id: string;
+  /** The address the file is downloaded from. */
+  url: string;
   title: string;
   site: string;
   kind: MediaKind;
@@ -18,6 +20,16 @@ export interface MediaItem {
   qualities: QualityOption[];
   /** DRM-protected streams are listed but cannot be downloaded. */
   protected: boolean;
+}
+
+/** What the network observer or the page scanner knows about one possible video. */
+export interface MediaCandidate {
+  url: string;
+  contentType?: string;
+  sizeBytes?: number;
+  /** The page the file was found on; names the site and, with `pageTitle`, the file. */
+  pageUrl?: string;
+  pageTitle?: string;
 }
 
 /**
@@ -72,6 +84,9 @@ export function formatSize(bytes: number): string {
   return `${rounded} ${SIZE_UNITS[unitIndex]}`;
 }
 
+/** What {quality} says for a plain file: its height is unknown, so it is "the file as it is". */
+const ORIGINAL_QUALITY_NAME = 'original';
+
 /** The file name (with extension) a download of `option` would be saved under. */
 export function downloadFilename(
   item: MediaItem,
@@ -83,7 +98,7 @@ export function downloadFilename(
   const name = renderFilename(template, {
     title: item.title,
     site: item.site,
-    quality: option.quality,
+    quality: option.quality === 'best' ? ORIGINAL_QUALITY_NAME : option.quality,
     date,
   });
   return `${name}.${extension}`;

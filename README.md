@@ -4,7 +4,7 @@ A browser extension that downloads videos from the page you are on. Firefox is t
 
 ## Status
 
-Early development: the screens (popup, options, in-page button, right-click entry) exist with demo data and nothing is downloaded yet (see `docs/status.md`). Planned for v1: direct video files, HLS and DASH streams, audio-only extraction, and site-specific support starting with YouTube. DRM-protected streams are not supported.
+Early development: it finds direct video and audio files (mp4, webm, mp3 and similar) on a page and downloads them from the popup, the in-page button or the right-click entry. Streams (HLS, DASH) are not downloaded yet (see `docs/status.md`). Planned for v1: direct video files, HLS and DASH streams, audio-only extraction, and site-specific support starting with YouTube. DRM-protected streams are not supported.
 
 Options planned: an in-page download button and a context-menu entry, each switchable.
 
@@ -22,6 +22,8 @@ Needs Node.js 26, pnpm 12 (`npm install -g pnpm`) and Firefox (the smoke test st
 ```
 
 This installs dependencies, checks licenses, typechecks, lints, runs the tests, packages Firefox and Chrome builds into `dist\packages`, writes `SHA256SUMS.txt` and smoke-tests the packages.
+
+To try a build by hand (load it in Firefox or Chrome, test pages, checklists), see `docs/manual-testing.md`.
 
 ## Legal
 

@@ -9,13 +9,17 @@
   <body>
     <header>
       <h1>StreamDraft</h1>
-      <a href="#" id="open-settings">Settings</a>
+      <div class="header-actions">
+        <button type="button" id="refresh" hidden title="Check the page for videos again">Refresh</button>
+        <a href="#" id="open-settings">Settings</a>
+      </div>
     </header>
+    <p id="refresh-note" role="status" hidden></p>
     <ul id="media-list"></ul>
     <p id="empty-notice" hidden>No videos found on this page.</p>
     <footer>
       <span id="status">Background: checking...</span>
-      <span>Demo data. Nothing is downloaded yet.</span>
+      <span id="mode-note" hidden>Demo data. Nothing is downloaded.</span>
     </footer>
     <script type="module" src="./main.ts"></script>
   </body>
