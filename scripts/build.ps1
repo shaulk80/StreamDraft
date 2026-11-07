@@ -4,13 +4,15 @@
 
 .DESCRIPTION
     Restore, license check, typecheck, lint, tests, package (Firefox and Chrome),
-    web-ext lint, checksums, smoke test of the packaged build.
+    web-ext lint, checksums, smoke tests of the packaged builds (Firefox, and
+    Chrome when a Chrome binary is found).
     Exits non-zero on any real failure. Coverage is reported by the test run and
     is never a gate.
 
     Keep this file ASCII: Windows PowerShell 5.1 reads BOM-less files as ANSI.
     It requires these package.json scripts (created in milestone M0):
-    check:licenses, typecheck, lint, test, zip:firefox, zip:chrome, smoke.
+    check:licenses, typecheck, lint, test, zip:firefox, zip:chrome, smoke,
+    smoke:chrome.
 
 .EXAMPLE
     .\scripts\build.ps1
@@ -135,6 +137,7 @@ Write-Checksums
 
 if (-not $SkipSmoke) {
     Invoke-Step 'Smoke test the packages' { pnpm run smoke }
+    Invoke-Step 'Smoke test the Chrome package' { pnpm run smoke:chrome }
 }
 
 Write-Host 'BUILD OK' -ForegroundColor Green

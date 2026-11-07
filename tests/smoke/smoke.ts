@@ -1,10 +1,10 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { unzipSync } from 'fflate';
 import { Builder, By, until } from 'selenium-webdriver';
 import * as firefox from 'selenium-webdriver/firefox.js';
 import { startTestPageServer } from '../pages/server.ts';
+import { extract, packageDir, readVersion } from './package-files.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -21,8 +21,6 @@ const ADDON_ID = 'streamdraft@shaulk80.github.io';
 const FIXED_UUID = 'f3c2a9e0-6b1d-4d2a-9a55-3b7c1e0d4a10';
 const WAIT_MS = 20_000;
 
-const root = path.resolve(import.meta.dirname, '..', '..');
-const packageDir = path.join(root, 'dist', 'packages');
 const problems: string[] = [];
 
 interface Manifest {
@@ -32,23 +30,6 @@ interface Manifest {
   action?: { default_popup?: string };
   background?: unknown;
   browser_specific_settings?: { gecko?: { id?: string } };
-}
-
-function readVersion(): string {
-  const packageJson = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')) as { version: string };
-  return packageJson.version;
-}
-
-function extract(zipPath: string, targetDir: string): void {
-  const entries = unzipSync(new Uint8Array(readFileSync(zipPath)));
-  for (const [name, data] of Object.entries(entries)) {
-    if (name.endsWith('/')) {
-      continue;
-    }
-    const target = path.join(targetDir, name);
-    mkdirSync(path.dirname(target), { recursive: true });
-    writeFileSync(target, data);
-  }
 }
 
 function checkManifest(label: string, dir: string, version: string, expectGeckoId: boolean): void {
