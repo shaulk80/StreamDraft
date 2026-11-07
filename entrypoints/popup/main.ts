@@ -31,16 +31,15 @@ function mockVideos(): readonly MediaItem[] | undefined {
   return wanted === 'empty' ? [] : MOCK_MEDIA;
 }
 
-// The popup is shown over the tab it belongs to. "?tab=ID" picks another tab,
+// The popup is shown over the tab it belongs to. "?tabUrl=PATTERN" (a match
+// pattern such as "http://127.0.0.1/page.html*") picks the tab by address instead,
 // which is how the smoke test (it opens the popup as a tab of its own) looks at a page.
 async function resolveTabId(): Promise<number | undefined> {
-  const requested = new URLSearchParams(window.location.search).get('tab');
-  if (requested !== null && /^\d+$/.test(requested)) {
-    return Number(requested);
-  }
+  const pattern = new URLSearchParams(window.location.search).get('tabUrl');
 
   try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    const query = pattern === null ? { active: true, currentWindow: true } : { url: pattern };
+    const [tab] = await browser.tabs.query(query);
     return tab?.id;
   } catch (error) {
     console.error('StreamDraft: could not find the current tab', error);

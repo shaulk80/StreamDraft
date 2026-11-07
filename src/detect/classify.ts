@@ -1,5 +1,6 @@
 import type { MediaCandidate, MediaItem } from '../core/media.ts';
 import { fail, ok, type Result } from '../core/result.ts';
+import { fileNameOf } from '../core/url-names.ts';
 import { detectType, type FileType } from './media-types.ts';
 
 /** Smaller files are tracking clips, ads and previews, not something to download. */
@@ -60,27 +61,11 @@ function titleOf(url: URL, pageTitle: string | undefined): string {
     return fromPage;
   }
 
-  const fileName = fileNameOf(url.pathname);
+  const fileName = fileNameOf(url.pathname).replace(/\.[^.]*$/, '');
   if (fileName !== '') {
     return fileName;
   }
   return hostOf(url);
-}
-
-function fileNameOf(pathname: string): string {
-  const lastSegment = pathname.split('/').pop() ?? '';
-  const withoutExtension = lastSegment.replace(/\.[^.]*$/, '');
-  return decodeForDisplay(withoutExtension).trim();
-}
-
-/** A bad %-escape in an address must not hide the video; show the text as it is. */
-function decodeForDisplay(text: string): string {
-  try {
-    return decodeURIComponent(text);
-  } catch (error) {
-    console.warn('StreamDraft: address has a bad %-escape, showing it as is', error);
-    return text;
-  }
 }
 
 function siteOf(url: URL, pageUrl: string | undefined): string {

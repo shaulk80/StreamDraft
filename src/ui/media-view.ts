@@ -7,6 +7,7 @@ import {
   type QualityOption,
 } from '../core/media.ts';
 import type { Settings } from '../core/settings.ts';
+import { fileNameOfAddress } from '../core/url-names.ts';
 
 const KIND_LABELS = { direct: 'Direct file', hls: 'HLS stream', dash: 'DASH stream' } as const;
 
@@ -85,12 +86,20 @@ export function createDownloadRow(doc: Document, item: MediaItem, settings: Sett
   return wrapper;
 }
 
+/**
+ * The line under the title. A direct file shows its file name: a page often
+ * has several videos with the same page title, and the name tells them apart.
+ */
+export function metaText(item: MediaItem): string {
+  const details = [item.site, KIND_LABELS[item.kind]];
+  const fileName = item.kind === 'direct' ? fileNameOfAddress(item.url) : '';
+  details.push(fileName === '' ? item.container : fileName);
+  return details.join(' · ');
+}
+
 function createCard(doc: Document, item: MediaItem, settings: Settings): HTMLElement {
   const card = createElement(doc, 'li', 'card');
-  card.append(
-    createElement(doc, 'h2', 'title', item.title),
-    createElement(doc, 'p', 'meta', `${item.site} · ${KIND_LABELS[item.kind]} · ${item.container}`),
-  );
+  card.append(createElement(doc, 'h2', 'title', item.title), createElement(doc, 'p', 'meta', metaText(item)));
 
   if (item.protected) {
     card.append(createProtectedNotice(doc));
