@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Storage spike",
+  "version": "0.0.1",
+  "permissions": ["downloads"],
+  "background": { "scripts": ["background.js"], "type": "module" },
+  "browser_specific_settings": { "gecko": { "id": "spike@streamdraft.test", "strict_min_version": "140.0" } }
+}
