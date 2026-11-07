@@ -1,10 +1,10 @@
 # StreamDraft: status
 
-Updated: 2026-11-06. Keep this file under 40 lines. History belongs in git and pull requests, not here.
+Updated: 2026-11-07. Keep this file under 40 lines. History belongs in git and pull requests, not here.
 
 ## Now
 
-M1 (clickable UI skeleton, all with mock data) is built (PR #2): popup, options page, in-page button, right-click entry; settings persist and apply live. `.\scripts\build.ps1` passes (96 unit tests, Firefox smoke test drives all four screens). The owner reviewed every screen by hand in Firefox (2026-11-06): all works as expected, no changes requested. Waiting for the merge. Next: M2 detection and direct downloads.
+M1 (clickable UI skeleton, all with mock data) is merged (PR #2): popup, options page, in-page button, right-click entry; settings persist and apply live; the owner reviewed every screen in Firefox, no changes requested. M2 (detection and direct downloads) started on branch `m2`: the task list is in `docs/plan.md`, no code yet. Next: M2 task 1, the detection core.
 
 ## Releases
 
