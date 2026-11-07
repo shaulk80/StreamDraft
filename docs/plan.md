@@ -52,6 +52,21 @@ Goal: streamed videos become a single playable file.
 
 Done when: a short spike decides the muxer (own code with mux.js/mp4box.js, or ffmpeg.wasm) and the disk-backed storage (OPFS) with a recorded decision; HLS and DASH manifests are parsed, quality selectable, segments fetched with retries and progress, output plays in a normal player; audio-only extraction works; a file larger than 1 GB downloads without running out of memory.
 
+Tasks (written 2026-11-07, work in this order, one commit per task):
+1. Spike, storage and hand-off: in Firefox and Chrome check that an extension page can write a large file to OPFS, and that `downloads.download` accepts a Blob URL made from that file without loading it into memory. Chrome needs an offscreen document, Firefox does not. Record the result and the engine host design in `docs/decisions/0003-storage-and-engine-host.md`. Done: both work at 1.5 GiB with flat memory.
+2. Spike, muxer: with a small TS-segment HLS sample and a fragmented-MP4 DASH sample, try mux.js and mp4box.js (bundled, no remote code); check licenses with `pnpm run check:licenses`, bundle size, memory, and that the output plays. ffmpeg.wasm only if both fail. Record the choice in `docs/decisions/0004-muxer.md`. Done: mux.js for TS plus own box-level code for fMP4, output is a flat MP4 (fragmented files froze in VLC; the owner checked the flat ones in Firefox, WMP and VLC).
+3. Core: `MediaItem` gets stream qualities (bandwidth, resolution, codecs, audio-only flag) and a `protected` reason; `Result` errors for unsupported manifests (`src/core`, unit tests).
+4. HLS parser (`src/formats`): master and media playlists, relative URLs, byte ranges, init segments, AES-128 key info; SAMPLE-AES and DRM key formats reported as protected, never downloaded. Fixtures from real-looking playlists, `test.each`.
+5. DASH parser (`src/formats`): static MPD with `SegmentTemplate`, `SegmentTimeline`, `SegmentList` and `BaseURL`; video and audio adaptation sets; `ContentProtection` reported as protected.
+6. Detection: the network observer and the page scanner list `.m3u8` and `.mpd` as streams (until now only recognised), fetch and parse the manifest lazily when the popup opens, show qualities.
+7. Engine core (`src/engine`): segment fetcher with limited concurrency, retries with backoff, progress and cancel; storage behind a small interface (OPFS in the browser, memory in tests); job state in `storage.local` so a suspended background can resume reporting.
+8. Muxing (decisions 0003 and 0004): HLS TS through mux.js with gop-fusion duplicates dropped; DASH and fMP4 merged by own box code; the result is a flat MP4 (sample tables built while muxing, so no second copy); `.m4a` wrapper for raw ADTS audio; AES-128 decryption through `crypto.subtle`; output written to OPFS. Unit tests use small fixtures and check that distinct presentation times equal the sample count.
+9. Engine host: one interface; Firefox runs in the background page, Chrome in an offscreen document; the finished file goes to `downloads.download` through a Blob URL, cleaned up after.
+10. Audio-only: extract the audio track of a stream or download an audio-only rendition as `.m4a`; popup offers it next to the qualities.
+11. Popup: real quality picker for streams, progress bar, cancel, error text in plain words.
+12. Test pages and smoke: local HLS and DASH sample streams under `tests/pages/` (small, generated or checked in), smoke tests download and check the output with `ffprobe` when present, otherwise by the MP4 box structure.
+13. Large file check: a generated stream over 1 GB, memory stays flat (measured and written in the PR); `docs/manual-testing.md` and `docs/status.md` updated; pull request; owner reviews in Firefox and Chrome.
+
 ## M4: site extractors (YouTube first) with a go/no-go gate
 
 Goal: one extractor interface and one working site extractor, or an explicit decision not to ship it.
