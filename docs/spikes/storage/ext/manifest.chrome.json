@@ -1,0 +1,7 @@
+{
+  "manifest_version": 3,
+  "name": "Storage spike",
+  "version": "0.0.1",
+  "permissions": ["downloads", "offscreen"],
+  "background": { "service_worker": "background.js", "type": "module" }
+}
