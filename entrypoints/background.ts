@@ -1,6 +1,8 @@
 import { demoDownloadMessage, handleMessage } from '../src/core/messages.ts';
 import { demoDownloadText, downloadFilename, pickQuality } from '../src/core/media.ts';
 import { DEMO_ITEM } from '../src/core/mock-media.ts';
+import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
+import { MediaRegistry } from '../src/detect/registry.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
 
@@ -26,6 +28,35 @@ export default defineBackground(() => {
     void answerMenuClick(tab.id);
   });
 
+  /** Finds videos from the network traffic of every tab and keeps them per tab. */
+  function registerDetection(): void {
+    const registry = new MediaRegistry(browser.storage.session);
+    const observer = new NetworkObserver({ registry, lookupTab });
+
+    // A new page in a tab starts with an empty list. Seen before the response
+    // of the new page, so a video opened as the page itself is not lost.
+    browser.webRequest.onBeforeRequest.addListener(
+      (details) => void observer.handleRequestStart(details),
+      { urls: ['<all_urls>'], types: ['main_frame'] },
+    );
+    browser.webRequest.onHeadersReceived.addListener(
+      (details) => void observer.handleResponse(details),
+      { urls: ['<all_urls>'], types: ['main_frame', 'media', 'xmlhttprequest', 'object', 'other'] },
+      ['responseHeaders'],
+    );
+    browser.tabs.onRemoved.addListener((tabId) => void registry.clear(tabId));
+  }
+
+  async function lookupTab(tabId: number): Promise<TabInfo | undefined> {
+    try {
+      const tab = await browser.tabs.get(tabId);
+      return { url: tab.url, title: tab.title };
+    } catch (error) {
+      console.error(`StreamDraft: could not read tab ${tabId}`, error);
+      return undefined;
+    }
+  }
+
   async function answerMenuClick(tabId: number): Promise<void> {
     const settings = await store.load();
     const option = pickQuality(DEMO_ITEM, settings.defaultQuality);
@@ -43,6 +74,8 @@ export default defineBackground(() => {
       console.error('StreamDraft: the page did not answer the menu click', error);
     }
   }
+
+  registerDetection();
 
   // The menu is rebuilt on every start, so it always matches the stored settings.
   void store.load().then((settings) => menu.apply(settings));
