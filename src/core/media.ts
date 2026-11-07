@@ -11,6 +11,8 @@ export interface QualityOption {
 /** A video found on a page, as the popup, the overlay and the menu show it. */
 export interface MediaItem {
   id: string;
+  /** The address the file is downloaded from. */
+  url: string;
   title: string;
   site: string;
   kind: MediaKind;
