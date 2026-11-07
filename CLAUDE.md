@@ -63,6 +63,9 @@ pnpm run smoke                        extracts the packages, loads the Firefox o
 - TypeScript is pinned to 6.0.x because typescript-eslint does not support 7 yet. Check `pnpm peers check` before upgrading.
 - PowerShell 5.1 turns native stderr (pnpm echoes each script) into errors under `$ErrorActionPreference = 'Stop'`; `build.ps1` relaxes it around native commands.
 - WebDriver cannot navigate to `moz-extension://`; the smoke test opens the popup from browser context (geckodriver `--allow-system-access`).
+- Node runs `.ts` scripts (smoke tests, test page server) in strip-only mode: no parameter properties (`constructor(private x: T)`), enums or namespaces in `tests/smoke/` and `tests/pages/`.
+- Chrome 137 and later ignore `--load-extension`; the Chrome smoke test sends `Extensions.loadUnpacked` over the DevTools port (`--enable-unsafe-extension-debugging`). Chrome ships built-in extensions with a `background.js` too: pick ours by the id that command returns.
+- A popup opened as a tab (smoke tests) is its own `sender.tab`; messages that need the page's tab carry `tabId` explicitly.
 - The sources zip is built from the working tree; `zip.excludeSources` keeps `coverage/` and `dist/` out.
 
 ## Definition of done

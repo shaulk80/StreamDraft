@@ -42,8 +42,8 @@ Tasks (written 2026-11-07, work in this order, one commit per task):
 5. Popup shows the real items of the current tab (the mock list stays behind `?mock=` for review); toolbar badge shows the count; empty state when nothing is found.
 6. Download: `downloads` permission, `downloads.download` with the filename template and the chosen quality, errors returned as `Result` and shown in the popup. Known limit to document: the downloads API sends cookies but not the page's `Referer`, so hosts that check it will refuse.
 7. Overlay and context menu use the real items: the overlay resolves its item from the video's source, the menu click uses `info.srcUrl` and falls back to the tab's registry; both start the real download; the two settings still switch them live.
-8. Test pages and smoke: `tests/pages/` serves small mp4 and webm files (a page with `<video src>`, one with `<source>`, one fetching a file the network observer sees but the DOM does not); smoke test extended to check the popup lists them.
-9. Chrome: build the zip and check it with a runtime check if a Chrome binary exists, otherwise list the manual steps for the owner; fix what differs (service worker lifetime, `webRequest` in MV3).
+8. (Done second, right after task 5, to test detection early.) Test pages and smoke: `tests/pages/` serves small mp4 and webm files (a page with `<video src>`, one with `<source>`, one fetching a file the network observer sees but the DOM does not); smoke test extended to check the popup lists them.
+9. Chrome: build the zip and check it with a runtime check if a Chrome binary exists, otherwise list the manual steps for the owner; fix what differs (service worker lifetime, `webRequest` in MV3). Done as `tests/smoke/chrome-smoke.ts` (headless Chrome over the DevTools protocol).
 10. `docs/status.md` updated, pull request, owner reviews on the test pages in Firefox and Chrome.
 
 ## M3: HLS, DASH and audio-only
