@@ -4,7 +4,7 @@ Updated: 2026-11-08. Keep this file under 40 lines. History belongs in git and p
 
 ## Now
 
-M2 (detection and direct downloads) is merged (PR #3). Direct mp4/webm/mp3 files are found by the network observer and the page scanner, listed per tab in the popup (badge, Refresh button) and downloaded through the downloads API from the popup, the in-page button and the right-click entry. `.\scripts\build.ps1` passes (278 unit tests, Firefox and Chrome smoke tests). The owner ran the manual checklist (`docs/manual-testing.md`) in Firefox Developer Edition (installed from the zip) and Chrome: all passed after the fixes in the PR. Next: M3 (HLS, DASH, audio-only), which starts with the muxer and storage spike; write its task list in `docs/plan.md` first.
+M2 (detection and direct downloads) is merged (PR #3): direct mp4/webm/mp3 files are found, listed per tab and downloaded; the owner checked it in Firefox and Chrome. M3 (HLS, DASH, audio-only) is in progress on branch `m3`: the task list is in `docs/plan.md`; tasks 1 to 3 are done. The spikes are decided: OPFS plus a Blob URL for storage and hand-off (`docs/decisions/0003-storage-and-engine-host.md`); mux.js for TS, own box code for fMP4, output is a flat MP4 because VLC froze on fragmented files (`docs/decisions/0004-muxer.md`). Core has the stream variant model and the quality ladder. Next: task 4, the HLS parser.
 
 ## Releases
 
@@ -27,7 +27,8 @@ M2 (detection and direct downloads) is merged (PR #3). Direct mp4/webm/mp3 files
 - Verified by hand: M1 screens (popup, options, in-page button, right-click entry) reviewed by the owner in Firefox, no changes; `streamdraft-0.0.1-firefox.zip` installs in Firefox Developer Edition (signatures check off), icon and popup work, no errors.
 - Verified in M2 (smoke tests, real Firefox and real Chrome 157, headless): the network observer (`webRequest`, also in the Chrome service worker) and the page scanner list the same five files of the test page and skip the 2 KB one; the popup, the in-page button and (Firefox) the right-click entry save the file under the template name with the right size.
 - Verified by hand in M2 (owner): the M2 checklist in Firefox Developer Edition (add-on installed from the zip, settings survive a restart) and in Chrome (Load unpacked), including the right-click entry in Chrome.
-- Not verified: the other API assumptions in docs/architecture.md (OPFS, offscreen document, MAIN-world scripts: M3 and M4).
+- Verified in the M3 spikes (Firefox 160 and Chrome 157, headless): 1.5 GiB through OPFS and a Blob URL to the downloads API with flat memory; the muxed samples play in Firefox, Windows Media Player and VLC (owner) once written as a flat MP4.
+- Not verified: Firefox private windows (OPFS), the Chrome offscreen document on long jobs, MAIN-world scripts (M4).
 - Known M2 gaps: the in-page button appears only for a video whose own address is a recognisable file (a `blob:` or extension-less address gets none; the popup still lists what the network observer saw); the downloads API sends cookies but not the page's `Referer`, so hosts that check it refuse; a download that fails after it started (server error) is not reported yet (M6).
 - Known M1 gaps for the review: no button or toast for videos inside iframes; no overlay in fullscreen; the extension asks for all-sites access (content script on `<all_urls>`).
 
