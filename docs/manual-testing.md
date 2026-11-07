@@ -56,6 +56,8 @@ Do each in Firefox, then in Chrome.
 - [ ] `hidden-stream` is listed although it is not in the page (only the network observer sees it).
 - [ ] Download on `direct.mp4`: the card says `Saving as "StreamDraft detection test page [original].mp4".` and the file appears in the download folder with 300 KB. Try one more card; `hidden-stream` saves as `... [original].mp4`.
 - [ ] Reload the page: the list and the badge reset and fill again.
+- [ ] "Refresh" button (top of the popup, next to Settings): click it. A line appears under the title: "Checked the page again. N videos listed." and the list is redrawn (quality choices and result lines reset). It does not find a file the network observer missed earlier (that traffic is gone), but it re-reports everything the page itself contains. If you ever see a missing video again, note what the page was doing (just loaded, scrolled, a video added by script) and whether Refresh brought it back.
+- [ ] Refresh on a page the extension cannot reach (for example a tab opened before you loaded the extension, or `about:debugging`): the line says it could not check the page and shows the saved list.
 - [ ] Open the popup while the page is still loading: the list grows live.
 - [ ] Open `/` in the same tab: the badge and the list change to that page's files.
 - [ ] A page without videos (for example the options page): the popup says "No videos found on this page." and there is no badge.
