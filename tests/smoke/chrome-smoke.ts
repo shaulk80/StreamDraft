@@ -72,7 +72,16 @@ async function readDebuggingPort(profileDir: string): Promise<number | undefined
     if (!existsSync(file)) {
       return undefined;
     }
-    const port = Number.parseInt(readFileSync(file, 'utf8').split('\n')[0] ?? '', 10);
+
+    // Chrome may still hold the file open while writing it (EBUSY on Windows): try again on the next poll.
+    // If it never becomes readable, the caller reports that the port did not open.
+    let text: string;
+    try {
+      text = readFileSync(file, 'utf8');
+    } catch {
+      return undefined;
+    }
+    const port = Number.parseInt(text.split('\n')[0] ?? '', 10);
     return Number.isInteger(port) ? port : undefined;
   });
 }
