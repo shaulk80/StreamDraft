@@ -51,7 +51,7 @@ Do each in Firefox, then in Chrome.
 
 **Detection page** (`/detect.html`):
 - [ ] The toolbar badge counts up to 5 within about 2 seconds (the last file is added by the page after 1 second).
-- [ ] The popup lists 5 cards: `clip.webm`, `direct.mp4`, `hidden-stream`, `late.mp4`, `song.mp3`. Each card: title "StreamDraft detection test page", the line `127.0.0.1 · Direct file · <file name>`, a quality list with one entry (e.g. "MP4 (300 KB)"), a Download button.
+- [ ] The popup lists 5 cards: `clip.webm`, `direct.mp4`, `hidden-stream`, `late.mp4`, `song.mp3`. Every card is titled "StreamDraft detection test page" (none named after the address). Each card has the line `127.0.0.1 · Direct file · <file name>`, a quality list with one entry (e.g. "MP4 (300 KB)"), a Download button. With 5 cards the list scrolls inside the popup (a scrollbar next to the cards); the popup itself has no scrollbar, and no horizontal one.
 - [ ] `tiny.mp4` is not listed (the page fetches it, but it is too small).
 - [ ] `hidden-stream` is listed although it is not in the page (only the network observer sees it).
 - [ ] Download on `direct.mp4`: the card says `Saving as "StreamDraft detection test page [original].mp4".` and the file appears in the download folder with 300 KB. Try one more card; `hidden-stream` saves as `... [original].mp4`.
@@ -64,13 +64,13 @@ Do each in Firefox, then in Chrome.
 - [ ] The video without a file at the top has no button. The tiny 80 x 45 video has no button. The three normal videos have a "Download" button in the top-right corner, including the one added after 1.5 seconds.
 - [ ] Scroll down: the button of the far-down video follows it, and buttons of videos scrolled out of view disappear.
 - [ ] Click the button, then Download in the small panel: it says `Saving as "StreamDraft test page [original].mp4".` (or the song/late name for the others) and the file is saved.
-- [ ] Right-click a video: the menu has "Download video with StreamDraft". Choosing it shows a toast at the bottom right of the page with the same `Saving as ...` text, and the file is saved.
+- [ ] Right-click a video: the menu has "Download video with StreamDraft". Choosing it shows a toast and saves the file. The toast is a small dark box at the bottom right of the page with the same `Saving as ...` text; it stays 5 seconds and disappears. If the browser's "ask where to save" dialog is on, the toast may only appear after you close the dialog, so turn that setting off for this check.
 - [ ] Right-click a video that has no file (the one at the top): the entry may show; choosing it says it could not tell which video this is, or downloads the only video; it must not download a wrong file.
 
 **Options** (toolbar button, Settings):
 - [ ] Untick "Show a download button on videos in the page" while the overlay page is open: the buttons vanish without reloading the page; switch on: they come back.
 - [ ] Untick 'Add "Download video" to the right-click menu': the right-click entry is gone; tick it: it is back.
-- [ ] File name: change it to `{site} {date}`; the preview updates; the next download is named like `127.0.0.1 2026-11-08.mp4`.
+- [ ] File name: change it to `{site} {date}`; the line "Example: ..." under the File name field updates as you type, showing the name a sample video would get (for `{site} {date}` something like `example.com 2026-11-08.mp4`); the next download is named like `127.0.0.1 2026-11-08.mp4`.
 - [ ] A bad template such as `{nope}` shows an error and is not saved; the old one keeps working.
 - [ ] Default quality: plain files have one quality, so nothing changes for them; check that picking another one does not break a download.
 - [ ] Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
