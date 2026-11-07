@@ -23,6 +23,8 @@ Needs Node.js 26, pnpm 12 (`npm install -g pnpm`) and Firefox (the smoke test st
 
 This installs dependencies, checks licenses, typechecks, lints, runs the tests, packages Firefox and Chrome builds into `dist\packages`, writes `SHA256SUMS.txt` and smoke-tests the packages.
 
+To try a build by hand (load it in Firefox or Chrome, test pages, checklists), see `docs/manual-testing.md`.
+
 ## Legal
 
 Download only what you have the right to download. StreamDraft does not circumvent DRM or access controls. You are responsible for following the terms of the sites you use and the copyright law that applies to you.
