@@ -1,7 +1,8 @@
-import { demoDownloadMessage, handleMessage } from '../src/core/messages.ts';
+import { demoDownloadMessage, handleMessage, parseFoundMediaMessage } from '../src/core/messages.ts';
 import { demoDownloadText, downloadFilename, pickQuality } from '../src/core/media.ts';
 import { DEMO_ITEM } from '../src/core/mock-media.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
+import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
@@ -13,9 +14,19 @@ export default defineBackground(() => {
     createMenusAdapter(browser.contextMenus, () => browser.runtime.lastError ?? undefined),
   );
 
+  const registry = new MediaRegistry(browser.storage.session);
+
   // Listeners are registered right away (not after an await): the browser can
   // stop this script at any time and wakes it for exactly these events.
-  browser.runtime.onMessage.addListener((message: unknown) => {
+  browser.runtime.onMessage.addListener((message: unknown, sender) => {
+    const found = parseFoundMediaMessage(message);
+    if (found.ok) {
+      // The sender is a page's content script; its tab is the one the videos belong to.
+      if (sender.tab?.id !== undefined) {
+        void addPageCandidates(registry, sender.tab.id, found.value);
+      }
+      return undefined;
+    }
     return Promise.resolve(handleMessage(message, startedAt));
   });
 
@@ -30,7 +41,6 @@ export default defineBackground(() => {
 
   /** Finds videos from the network traffic of every tab and keeps them per tab. */
   function registerDetection(): void {
-    const registry = new MediaRegistry(browser.storage.session);
     const observer = new NetworkObserver({ registry, lookupTab });
 
     // A new page in a tab starts with an empty list. Seen before the response

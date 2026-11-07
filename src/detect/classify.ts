@@ -1,16 +1,6 @@
-import type { MediaItem } from '../core/media.ts';
+import type { MediaCandidate, MediaItem } from '../core/media.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import { detectType, type FileType } from './media-types.ts';
-
-/** What the network observer or the page scanner knows about one possible video. */
-export interface MediaCandidate {
-  url: string;
-  contentType?: string;
-  sizeBytes?: number;
-  /** The page the file was found on; names the site and, with `pageTitle`, the file. */
-  pageUrl?: string;
-  pageTitle?: string;
-}
 
 /** Smaller files are tracking clips, ads and previews, not something to download. */
 export const MIN_DIRECT_SIZE_BYTES = 100 * 1024;

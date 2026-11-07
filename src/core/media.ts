@@ -22,6 +22,16 @@ export interface MediaItem {
   protected: boolean;
 }
 
+/** What the network observer or the page scanner knows about one possible video. */
+export interface MediaCandidate {
+  url: string;
+  contentType?: string;
+  sizeBytes?: number;
+  /** The page the file was found on; names the site and, with `pageTitle`, the file. */
+  pageUrl?: string;
+  pageTitle?: string;
+}
+
 /**
  * Picks the option to preselect: the wanted quality if the video has it,
  * otherwise the best video option that is not above it, otherwise the first

@@ -1,6 +1,6 @@
-import type { MediaItem } from '../core/media.ts';
+import type { MediaCandidate, MediaItem } from '../core/media.ts';
 import type { Result } from '../core/result.ts';
-import { classifyCandidate, type MediaCandidate } from './classify.ts';
+import { classifyCandidate } from './classify.ts';
 import { headerValue, totalSizeOf, type HeaderLike } from './headers.ts';
 import type { MediaRegistry } from './registry.ts';
 
