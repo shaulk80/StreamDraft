@@ -1,4 +1,4 @@
-import { formatSize, pickQuality, type MediaItem, type QualityOption } from '../core/media.ts';
+import { formatSize, needsManifest, pickQuality, type MediaItem, type QualityOption } from '../core/media.ts';
 import type { Settings } from '../core/settings.ts';
 import { fileNameOfAddress } from '../core/url-names.ts';
 import type { DownloadAction } from './download-client.ts';
@@ -45,13 +45,33 @@ function createQualityPicker(doc: Document, item: MediaItem, wanted: Settings['d
   return select;
 }
 
-function createProtectedNotice(doc: Document): HTMLElement {
-  return createElement(
-    doc,
-    'p',
-    'notice',
-    'Protected by DRM. StreamDraft does not download protected videos.',
-  );
+const READING_TEXT = 'Reading the stream...';
+
+/** What to say under a protected video: what protects it, when the manifest says. */
+export function protectedText(item: MediaItem): string {
+  const reason = item.protectedReason === undefined ? 'DRM' : item.protectedReason;
+  return `Protected (${reason}). StreamDraft does not download protected videos.`;
+}
+
+/** The line that takes the place of the download row, or undefined when the video can be downloaded. */
+export function noticeText(item: MediaItem): string | undefined {
+  if (item.protected) {
+    return protectedText(item);
+  }
+  if (!needsManifest(item)) {
+    return undefined;
+  }
+  return item.manifestError ?? READING_TEXT;
+}
+
+/**
+ * Changes whenever the list needs drawing again: a video came, or a stream's
+ * manifest was read. Redrawing resets a quality choice, so nothing else counts.
+ */
+export function listSignature(items: readonly MediaItem[]): string {
+  return items
+    .map((item) => [item.id, item.qualities.length, item.protected, item.manifestError ?? ''].join('|'))
+    .join('\n');
 }
 
 export function createDownloadRow(
@@ -105,8 +125,9 @@ function createCard(doc: Document, item: MediaItem, settings: Settings, download
   const card = createElement(doc, 'li', 'card');
   card.append(createElement(doc, 'h2', 'title', item.title), createElement(doc, 'p', 'meta', metaText(item)));
 
-  if (item.protected) {
-    card.append(createProtectedNotice(doc));
+  const notice = noticeText(item);
+  if (notice !== undefined) {
+    card.append(createElement(doc, 'p', 'notice', notice));
     return card;
   }
 

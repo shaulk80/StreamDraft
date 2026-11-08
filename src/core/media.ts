@@ -46,6 +46,24 @@ export interface MediaItem {
   protected: boolean;
   /** What protects the stream, in words for the popup (for example "Widevine DRM"); only with `protected`. */
   protectedReason?: string;
+  /** Why the manifest could not be read, in words for the popup; only for streams. */
+  manifestError?: string;
+  /**
+   * HLS master playlists only: the addresses of the playlists of its renditions.
+   * They are parts of this stream, not videos of their own, and are not listed.
+   */
+  partUrls?: string[];
+}
+
+/** What reading a stream's manifest adds to its item. */
+export type StreamDetails = Pick<MediaItem, 'qualities' | 'protected' | 'protectedReason' | 'manifestError' | 'partUrls'>;
+
+/**
+ * A stream whose manifest has not been read yet (or could not be, see
+ * `manifestError`): it has nothing to offer for download.
+ */
+export function needsManifest(item: MediaItem): boolean {
+  return item.kind !== 'direct' && !item.protected && item.qualities.length === 0;
 }
 
 /** What the network observer or the page scanner knows about one possible video. */

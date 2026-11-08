@@ -6,6 +6,8 @@ import {
   parseShowTextMessage,
   showTextMessage,
   parseFoundMediaMessage,
+  parseResolveStreamsMessage,
+  resolveStreamsMessage,
   PING,
 } from '../../src/core/messages.ts';
 
@@ -90,5 +92,21 @@ describe('parseFoundMediaMessage', () => {
     ['a list that is not a list', { type: 'found-media', candidates: 'x' }],
   ])('rejects %s', (_name, message) => {
     expect(parseFoundMediaMessage(message).ok).toBe(false);
+  });
+});
+
+describe('parseResolveStreamsMessage', () => {
+  test('returns the tab of a resolve-streams message', () => {
+    expect(parseResolveStreamsMessage(resolveStreamsMessage(7))).toEqual({ ok: true, value: 7 });
+  });
+
+  test.each([
+    ['not an object', 'resolve-streams'],
+    ['another type', { type: 'ping', tabId: 7 }],
+    ['no tab', { type: 'resolve-streams' }],
+    ['a tab that is not a whole number', { type: 'resolve-streams', tabId: 1.5 }],
+    ['a tab that is text', { type: 'resolve-streams', tabId: '7' }],
+  ])('rejects %s', (_name, message) => {
+    expect(parseResolveStreamsMessage(message).ok).toBe(false);
   });
 });

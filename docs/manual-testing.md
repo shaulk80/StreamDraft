@@ -40,6 +40,7 @@ Leave it running. Two pages, both on `http://127.0.0.1:8123/`:
 |---|---|---|
 | Overlay page | `/` | the in-page button and the right-click entry |
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
+| Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
 
 The media files are filler bytes with the right content type. They do not play (the player shows an error), but they download. Sizes: `direct.mp4` 300 KB, `clip.webm` 250 KB, `song.mp3` 200 KB, `late.mp4` 220 KB, `hidden-stream` 400 KB, `tiny.mp4` 2 KB.
 
@@ -78,6 +79,12 @@ Do each in Firefox, then in Chrome.
 - [ ] Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
 - [ ] Settings survive closing and reopening the browser (not the temporary Firefox add-on: it is removed on exit).
 
+**Streams page** (`/streams.html`, M3):
+- [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
+- [ ] The rendition playlist the page loads (`v720/index.m3u8`) is not a card of its own. The badge counts 2.
+- [ ] Download on a stream says streamed videos cannot be downloaded yet (until the engine is done).
+- [ ] Stop `pnpm run testpage`, reload the popup on a fresh tab of the page: the cards say the playlist could not be loaded, and read fine again after you restart the server and press Refresh.
+
 **Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
 
 ## 5. Known gaps (do not report again)
@@ -86,7 +93,9 @@ Do each in Firefox, then in Chrome.
 - No button or toast for videos inside iframes; no button in fullscreen.
 - Downloads do not send the page's `Referer`: hosts that check it refuse.
 - A download that fails after it started (server error) is not reported yet (M6).
-- Streams (HLS, DASH) and protected videos are not downloaded (M3 / never). The popup says so on the sample cards.
+- Streams (HLS, DASH) are listed with their qualities but cannot be downloaded yet (M3, tasks 7 to 9): Download says so. Protected videos are never downloaded.
+- Live streams and DASH with several periods are listed with an error for now.
+- A stream's manifest is read by the extension without the page's `Referer`: hosts that check it make the card say the playlist could not be loaded.
 - The extension asks for access to all sites (detection needs it; see `docs/decisions/0002-detection-permissions.md`).
 - The right-click entry has not been run in Chrome by the automated tests (headless Chrome cannot operate the menu): check it by hand there.
 

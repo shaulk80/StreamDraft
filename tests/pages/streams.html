@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft streams test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft streams test page</h1>
+    <p>
+      The popup should list two streams for this tab: the HLS master playlist (720p, 360p, Audio only) and the DASH
+      manifest (720p, 360p, Audio only). The page also loads one rendition playlist of the HLS stream, as a player
+      does; it is a part of the stream and must not be listed. The segments do not exist: this page tests detection
+      and the quality list, not the download.
+    </p>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      async function load() {
+        await fetch('/streams/master.m3u8');
+        await fetch('/streams/v720/index.m3u8');
+        await fetch('/streams/manifest.mpd');
+      }
+      load()
+        .then(() => {
+          document.getElementById('fetch-status').textContent = 'fetched';
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>

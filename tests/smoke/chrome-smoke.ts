@@ -126,6 +126,44 @@ async function listedFileNames(popup: Page): Promise<string> {
     .join(', ');
 }
 
+// HLS and DASH: the page loads a master playlist, one of its rendition playlists (which must
+// not be listed) and a DASH manifest. The popup reads the manifests when it opens and offers
+// their qualities.
+const EXPECTED_STREAM_CARDS = [
+  { meta: '127.0.0.1 · DASH stream · mp4', options: ['720p (8.9 MB)', '360p (2.9 MB)', 'Audio only (234 KB)'] },
+  { meta: '127.0.0.1 · HLS stream · mp4', options: ['720p', '360p', 'Audio only'] },
+];
+
+async function streamCards(popup: Page): Promise<string> {
+  const cards = await popup.evaluate<{ meta: string; options: string[] }[]>(
+    "[...document.querySelectorAll('#media-list .card')].map((card) => ({ meta: card.querySelector('.meta')?.textContent ?? '', options: [...card.querySelectorAll('.quality option')].map((option) => option.textContent) }))",
+  );
+  return JSON.stringify([...(cards ?? [])].sort((left, right) => left.meta.localeCompare(right.meta)));
+}
+
+async function checkStreams(browser: CdpConnection, extensionId: string, pageUrl: string): Promise<void> {
+  const page = await Page.open(browser, `${pageUrl}streams.html`);
+  const fetched = await waitFor(async () =>
+    (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched')
+      ? true
+      : undefined,
+  );
+  if (!fetched) {
+    problems.push('chrome runtime: the streams test page did not finish loading');
+    return;
+  }
+
+  const pattern = encodeURIComponent('http://127.0.0.1/streams.html*');
+  const popup = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
+  const expected = JSON.stringify(EXPECTED_STREAM_CARDS);
+  const listed = await waitFor(async () => ((await streamCards(popup)) === expected ? true : undefined));
+  if (!listed) {
+    problems.push(`chrome runtime: streams: expected ${expected}, popup shows ${await streamCards(popup)}`);
+    return;
+  }
+  console.log('Chrome runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
+}
+
 async function checkDetectionAndDownload(
   browser: CdpConnection,
   extensionId: string,
@@ -297,6 +335,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await sleep(LISTENER_SETTLE_MS);
 
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
+    await checkStreams(browser, extensionId, server.url);
     await checkOverlay(browser, server.url, downloadDir);
   } catch (error) {
     console.error(error);

@@ -11,7 +11,8 @@ const ALLOWED_PROTOCOLS = ['http:', 'https:'];
 /**
  * Decides whether a candidate is a downloadable direct file and builds its
  * item. The error says why it is not, so callers can log it at debug level.
- * HLS and DASH manifests are recognised but rejected until M3 can fetch them.
+ * HLS and DASH manifests give a stream item without qualities; reading the
+ * manifest fills them in (`StreamResolver`).
  */
 export function classifyCandidate(candidate: MediaCandidate): Result<MediaItem> {
   if (!URL.canParse(candidate.url)) {
@@ -28,7 +29,8 @@ export function classifyCandidate(candidate: MediaCandidate): Result<MediaItem> 
     return fail('Not a video or audio file.');
   }
   if (detected.kind !== 'direct') {
-    return fail(`${detected.kind.toUpperCase()} streams are not supported yet.`);
+    // The manifest is small by nature; its qualities are read later, when the popup opens.
+    return ok(buildStreamItem(url, detected.kind, candidate));
   }
 
   const { sizeBytes } = candidate;
@@ -37,6 +39,21 @@ export function classifyCandidate(candidate: MediaCandidate): Result<MediaItem> 
   }
 
   return ok(buildItem(url, detected.file, candidate));
+}
+
+function buildStreamItem(url: URL, kind: 'hls' | 'dash', candidate: MediaCandidate): MediaItem {
+  const address = addressWithoutFragment(url.href) ?? url.href;
+  return {
+    id: address,
+    url: address,
+    title: titleOf(url, candidate.pageTitle),
+    site: siteOf(url, candidate.pageUrl),
+    kind,
+    // The engine writes a flat MP4 (decision 0004).
+    container: 'mp4',
+    qualities: [],
+    protected: false,
+  };
 }
 
 function buildItem(url: URL, file: FileType, candidate: MediaCandidate): MediaItem {

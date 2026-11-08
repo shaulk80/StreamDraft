@@ -157,3 +157,30 @@ export function rescanMediaMessage(): { type: typeof RESCAN_MEDIA } {
 export function isRescanMediaMessage(message: unknown): boolean {
   return typeof message === 'object' && message !== null && (message as { type?: unknown }).type === RESCAN_MEDIA;
 }
+
+/**
+ * Message the popup sends to the background when it opens (and on Refresh): read
+ * the manifests of the streams found on a tab, so they can offer qualities.
+ * The answer is a `Result<number>`: how many streams were read.
+ */
+export const RESOLVE_STREAMS = 'resolve-streams';
+
+export function resolveStreamsMessage(tabId: number): { type: typeof RESOLVE_STREAMS; tabId: number } {
+  return { type: RESOLVE_STREAMS, tabId };
+}
+
+/** Returns the tab to resolve, or an error when `message` is not a valid resolve-streams message. */
+export function parseResolveStreamsMessage(message: unknown): Result<number> {
+  if (typeof message !== 'object' || message === null) {
+    return fail('Message must be an object.');
+  }
+
+  const { type, tabId } = message as Record<string, unknown>;
+  if (type !== RESOLVE_STREAMS) {
+    return fail('Not a resolve-streams message.');
+  }
+  if (typeof tabId !== 'number' || !Number.isInteger(tabId)) {
+    return fail('The resolve-streams message has no valid tab.');
+  }
+  return ok(tabId);
+}

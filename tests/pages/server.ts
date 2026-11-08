@@ -10,6 +10,16 @@ import path from 'node:path';
 const PAGES: Readonly<Record<string, string>> = {
   '/': 'video.html',
   '/detect.html': 'detect.html',
+  '/streams.html': 'streams.html',
+};
+
+// Small HLS playlists and a DASH manifest, read from tests/pages/streams. Their segments are not served.
+const MANIFESTS: Readonly<Record<string, { file: string; contentType: string }>> = {
+  '/streams/master.m3u8': { file: 'streams/master.m3u8', contentType: 'application/vnd.apple.mpegurl' },
+  '/streams/v720/index.m3u8': { file: 'streams/v720/index.m3u8', contentType: 'application/vnd.apple.mpegurl' },
+  '/streams/v360/index.m3u8': { file: 'streams/v360/index.m3u8', contentType: 'application/vnd.apple.mpegurl' },
+  '/streams/audio/index.m3u8': { file: 'streams/audio/index.m3u8', contentType: 'application/vnd.apple.mpegurl' },
+  '/streams/manifest.mpd': { file: 'streams/manifest.mpd', contentType: 'application/dash+xml' },
 };
 
 interface MediaFile {
@@ -91,6 +101,13 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
     return;
   }
 
+  const manifest = MANIFESTS[pathname];
+  if (manifest !== undefined) {
+    response.setHeader('Content-Type', manifest.contentType);
+    response.end(readFileSync(path.join(import.meta.dirname, manifest.file)));
+    return;
+  }
+
   const media = MEDIA[pathname];
   if (media !== undefined) {
     sendMedia(request, response, media);
@@ -119,5 +136,5 @@ export function startTestPageServer(port: number): Promise<TestPageServer> {
 
 if (import.meta.main) {
   const started = await startTestPageServer(8123);
-  console.log(`Test pages: ${started.url} (overlay) and ${started.url}detect.html (detection)  (Ctrl+C to stop)`);
+  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection) and ${started.url}streams.html (HLS and DASH)  (Ctrl+C to stop)`);
 }
