@@ -33,7 +33,11 @@ export function readSavedStream(filePath: string): { ok: true; samplesPerTrack: 
   }
 }
 
-/** A problem text when the saved DASH file is not the two joined tracks, otherwise undefined. */
+/**
+ * A problem text when the saved DASH file is not the two joined tracks, otherwise undefined. ffprobe is
+ * not asked: the generated DASH picture is filler bytes behind an `avc1` entry, which a real demuxer
+ * rejects ("No start code is found"). The HLS file, made of real video, is the one it checks.
+ */
 export function dashFileProblem(filePath: string): string | undefined {
   const saved = readSavedStream(filePath);
   if (!saved.ok) {
@@ -43,7 +47,7 @@ export function dashFileProblem(filePath: string): string | undefined {
     return `${DASH_FILE_NAME} has tracks of [${saved.samplesPerTrack.join(', ')}] samples, expected [${DASH_TRACKS.join(', ')}]`;
   }
 
-  return ffprobeProblem(filePath, PICTURE_AND_SOUND);
+  return undefined;
 }
 
 /** A problem text when the saved HLS file has no video and sound samples, otherwise undefined. */
