@@ -1,10 +1,10 @@
 import { fail, ok, type Result } from '../core/result.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
 
-/** A part of a resource, as the manifest states it. */
+/** A part of a resource, as the manifest states it. Without `length` it runs to the end of the resource. */
 export interface ByteRange {
   offset: number;
-  length: number;
+  length?: number;
 }
 
 /** What to fetch: a whole file, or a part of one. */
@@ -81,7 +81,8 @@ function isRetryableStatus(status: number): boolean {
 }
 
 function rangeHeader(range: ByteRange): string {
-  return `bytes=${range.offset}-${range.offset + range.length - 1}`;
+  const last = range.length === undefined ? '' : range.offset + range.length - 1;
+  return `bytes=${range.offset}-${last}`;
 }
 
 /**
@@ -92,7 +93,7 @@ function wantedPart(bytes: Uint8Array, range: ByteRange | undefined, status: num
   if (range === undefined || status === PARTIAL_CONTENT) {
     return bytes;
   }
-  return bytes.subarray(range.offset, range.offset + range.length);
+  return bytes.subarray(range.offset, range.length === undefined ? undefined : range.offset + range.length);
 }
 
 /**
@@ -121,7 +122,7 @@ export function createSegmentFetcher(fetchLike: SegmentFetchLike, options: Segme
       }
 
       const bytes = wantedPart(new Uint8Array(await response.arrayBuffer()), request.byteRange, response.status);
-      if (request.byteRange !== undefined && bytes.length !== request.byteRange.length) {
+      if (request.byteRange?.length !== undefined && bytes.length !== request.byteRange.length) {
         return { result: fail('The server sent an incomplete part of the file.'), retry: true };
       }
       return { result: ok(bytes), retry: false };

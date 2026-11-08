@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>StreamDraft engine</title>
+    <!-- Only Chrome needs it: the service worker has no DOM, Firefox runs the engine in the background page. -->
+    <meta name="manifest.include" content="['chrome']" />
+  </head>
+  <body>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

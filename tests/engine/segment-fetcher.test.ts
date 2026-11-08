@@ -118,6 +118,25 @@ describe('createSegmentFetcher', () => {
       expect(result).toEqual({ ok: true, value: new Uint8Array([10, 11, 12]) });
     });
 
+    test('asks for everything from the offset on when the part has no length', async () => {
+      const fetchLike = answering(respond(206, [4, 5, 6, 7]));
+      const fetchSegment = createSegmentFetcher(fetchLike, { sleep: instantSleep() });
+
+      const result = await fetchSegment({ url: URL_A, byteRange: { offset: 10 } }, new AbortController().signal);
+
+      expect(result).toEqual({ ok: true, value: new Uint8Array([4, 5, 6, 7]) });
+      expect(fetchLike).toHaveBeenCalledWith(URL_A, expect.objectContaining({ headers: { Range: 'bytes=10-' } }));
+    });
+
+    test('cuts the open-ended part out when the server ignores the range', async () => {
+      const whole = Array.from({ length: 14 }, (_unused, index) => index);
+      const fetchSegment = createSegmentFetcher(answering(respond(200, whole)), { sleep: instantSleep() });
+
+      const result = await fetchSegment({ url: URL_A, byteRange: { offset: 10 } }, new AbortController().signal);
+
+      expect(result).toEqual({ ok: true, value: new Uint8Array([10, 11, 12, 13]) });
+    });
+
     test('retries a part that came back too short', async () => {
       const fetchLike = answering(respond(206, [4, 5]), respond(206, [4, 5, 6]));
       const fetchSegment = createSegmentFetcher(fetchLike, { sleep: instantSleep() });

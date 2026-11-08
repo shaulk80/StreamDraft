@@ -9,10 +9,17 @@ export default defineConfig({
     // Keep generated and local folders out of the sources zip that Mozilla may review.
     excludeSources: ['coverage/**', 'dist/**', '.claude/**'],
   },
-  manifest: {
+  manifest: ({ browser }) => ({
     name: 'StreamDraft',
     description: 'Download videos from the page you are on.',
-    permissions: ['storage', 'contextMenus', 'webRequest', 'downloads'],
+    permissions: [
+      'storage',
+      'contextMenus',
+      'webRequest',
+      'downloads',
+      // Chrome runs the stream engine in an offscreen document; Firefox does not know the permission.
+      ...(browser === 'firefox' ? [] : ['offscreen']),
+    ],
     // Detection watches the responses of every site; see docs/decisions/0002-detection-permissions.md.
     host_permissions: ['<all_urls>'],
     browser_specific_settings: {
@@ -24,5 +31,5 @@ export default defineConfig({
       // Android is a non-goal, but the manifest key above needs Android 142.
       gecko_android: { strict_min_version: '142.0' },
     },
-  },
+  }),
 });

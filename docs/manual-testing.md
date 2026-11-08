@@ -34,13 +34,14 @@ To try the packaged zip instead (as a user would get it): Developer Edition, `xp
 pnpm run testpage
 ```
 
-Leave it running. Two pages, both on `http://127.0.0.1:8123/`:
+Leave it running. Four pages, all on `http://127.0.0.1:8123/`:
 
 | Page | Address | For |
 |---|---|---|
 | Overlay page | `/` | the in-page button and the right-click entry |
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
+| Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
 
 The media files are filler bytes with the right content type. They do not play (the player shows an error), but they download. Sizes: `direct.mp4` 300 KB, `clip.webm` 250 KB, `song.mp3` 200 KB, `late.mp4` 220 KB, `hidden-stream` 400 KB, `tiny.mp4` 2 KB.
 
@@ -82,8 +83,16 @@ Do each in Firefox, then in Chrome.
 **Streams page** (`/streams.html`, M3):
 - [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
 - [ ] The rendition playlist the page loads (`v720/index.m3u8`) is not a card of its own. The badge counts 2.
-- [ ] Download on a stream says streamed videos cannot be downloaded yet (until the engine is done).
+- [ ] Download on these streams starts a job that fails (their segments do not exist on this page): the popup still says "Saving as ..." and nothing is saved, because the popup does not show a job's progress or failure yet (task 11). Use the download page below for a download that works.
 - [ ] Stop `pnpm run testpage`, reload the popup on a fresh tab of the page: the cards say the playlist could not be loaded, and read fine again after you restart the server and press Refresh.
+
+**Stream download page** (`/download.html`, M3 task 9; the popup still has no progress bar, that is task 11):
+- [ ] The popup shows two cards: `127.0.0.1 · DASH stream · mp4` (360p, Audio only) and `127.0.0.1 · HLS stream · mp4`.
+- [ ] Download on the DASH card: the popup says `Saving as "StreamDraft stream download test page [360p].mp4".` and the file appears in the download folder after a moment, a few KB. The HLS card saves `... [original].mp4`. (The pictures are made-up bytes: the files are valid MP4 structure but do not play.)
+- [ ] Chrome only: the engine runs in an offscreen document that exists only while a download runs (the smoke test sees it open and then closed; whether `chrome://extensions` lists it under Inspect views is not checked).
+- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten.
+- [ ] Firefox private window: Download says the browser would not give the extension space (OPFS is not available there). Not verified yet.
+- [ ] Real streams: on a public page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
 
 **Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
 
@@ -93,7 +102,8 @@ Do each in Firefox, then in Chrome.
 - No button or toast for videos inside iframes; no button in fullscreen.
 - Downloads do not send the page's `Referer`: hosts that check it refuse.
 - A download that fails after it started (server error) is not reported yet (M6).
-- Streams (HLS, DASH) are listed with their qualities but cannot be downloaded yet (M3, tasks 7 to 9): Download says so. Protected videos are never downloaded.
+- Streams (HLS, DASH) download (M3 task 9) but show no progress or cancel button yet (task 11), and "Audio only" taken out of a video's own sound is refused (task 10). Protected videos are never downloaded.
+- Temporary files of a stream download that was cut off by a browser crash stay in the extension's private storage until a later version cleans them (M6).
 - Live streams and DASH with several periods are listed with an error for now.
 - A stream's manifest is read by the extension without the page's `Referer`: hosts that check it make the card say the playlist could not be loaded.
 - The extension asks for access to all sites (detection needs it; see `docs/decisions/0002-detection-permissions.md`).
@@ -103,6 +113,6 @@ Do each in Firefox, then in Chrome.
 
 So you can skip it, or look only at how it feels:
 
-- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; options page keeps a setting and rejects a bad template.
-- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name.
+- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; the two generated streams of `/download.html` download and are readable MP4 files (DASH: picture and sound); options page keeps a setting and rejects a bad template.
+- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name; the two generated streams of `/download.html` download through the offscreen document and the document closes afterwards.
 - Not covered by any test: how it looks, the toolbar badge, the right-click entry in Chrome, loading the way a user does (Firefox signed install, Chrome Load unpacked).
