@@ -34,7 +34,7 @@ To try the packaged zip instead (as a user would get it): Developer Edition, `xp
 pnpm run testpage
 ```
 
-Leave it running. Four pages, all on `http://127.0.0.1:8123/`:
+Leave it running. Pages, all on `http://127.0.0.1:8123/`:
 
 | Page | Address | For |
 |---|---|---|
@@ -43,6 +43,7 @@ Leave it running. Four pages, all on `http://127.0.0.1:8123/`:
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
 | Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
 | Job display page | `/jobs.html` | a slow and a broken stream: progress, Cancel, failure text (M3) |
+| Large stream page | `/large.html` | one stream of 1.1 GB, built by the server as it is asked for (M3, large file check) |
 
 The media files are filler bytes with the right content type. They do not play (the player shows an error), but they download. Sizes: `direct.mp4` 300 KB, `clip.webm` 250 KB, `song.mp3` 200 KB, `late.mp4` 220 KB, `hidden-stream` 400 KB, `tiny.mp4` 2 KB.
 
@@ -104,6 +105,12 @@ Do each in Firefox, then in Chrome.
 - [ ] Firefox private window: Download says the browser would not give the extension space (OPFS is not available there). Not verified yet.
 - [ ] Real streams: on a public page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
 
+**Large stream page** (`/large.html`, M3 task 13): one DASH stream, 720p and Audio only, of 68 parts of 16 MB. Needs about 3 GB of free disk space for a minute or two, and a task manager open next to the browser. (`SMOKE_LARGE=1` runs the same download in the smoke tests and measures the memory for you; this is the by-hand version.)
+- [ ] Download the 720p card: the bar fills in a minute or less and the card ends with "Saved to your downloads folder."; `StreamDraft large stream test page [720p].mp4` is about 1.1 GB. (Made-up bytes: it does not play.)
+- [ ] While it runs, watch the memory of the browser in the task manager (Firefox: the extension's tab process; Chrome: the "Extension" renderer, there is one more while the offscreen document lives). It should climb by a few hundred MB and stay there, not follow the bar up to 1.1 GB. Measured with the smoke tests: Firefox +150 to +380 MB, Chrome +400 to +590 MB.
+- [ ] Afterwards the temporary files are gone: in Firefox `about:preferences#privacy` > Cookies and Site Data, or in Chrome the site data of the extension, shows nothing large. (The smoke test reads the storage use of the extension after the job: 0 MB.)
+- [ ] Press Cancel half way: "Cancelled.", the memory falls back, and the disk space is given back.
+
 **Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
 
 ## 5. Known gaps (do not report again)
@@ -125,4 +132,5 @@ So you can skip it, or look only at how it feels:
 
 - Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; the two generated streams of `/download.html` download, are readable MP4 files (DASH: picture and sound) and end as "Saved to your downloads folder."; on `/jobs.html` a slow stream shows its progress (also in a popup opened again) and is cancelled, a stream with a missing part ends with the failure text; options page keeps a setting and rejects a bad template.
 - Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name; the two generated streams of `/download.html` download through the offscreen document and the document closes afterwards; the same progress, Cancel and failure checks on `/jobs.html`.
+- Large file check (opt-in, `SMOKE_LARGE=1` before `pnpm run smoke` or `pnpm run smoke:chrome`; about a minute each, 3 GB of disk): the 1.1 GB stream of `/large.html` downloads, the saved file has every sample with the right bytes, the memory of the browser grows by less than 768 MB, and the extension's storage is empty afterwards. Not run by `build.ps1` or in CI.
 - Not covered by any test: how it looks, the toolbar badge, the right-click entry in Chrome, loading the way a user does (Firefox signed install, Chrome Load unpacked).
