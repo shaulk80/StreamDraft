@@ -21,4 +21,4 @@ export interface PlannedSource {
 export const NO_VARIANT = 'This quality is not available for the video. Reload the page and try again.';
 export const PROTECTED = 'This video is protected by DRM and cannot be downloaded.';
 export const LIVE = 'Live streams cannot be downloaded yet.';
-export const AUDIO_EXTRACTION_MISSING = 'Taking the sound out of a video is not available yet.';
+export const NO_SOUND = 'This video has no sound to save.';

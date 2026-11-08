@@ -87,7 +87,13 @@ function audioRenditionOf(master: HlsMasterPlaylist, variant: HlsVariant): HlsAu
   return group.find((rendition) => rendition.isDefault) ?? group[0];
 }
 
-async function planMaster(master: HlsMasterPlaylist, wanted: StreamVariant, fetchText: FetchText): Promise<Result<PlannedSource[]>> {
+/** Loads the media playlist at `url` and plans its stream. */
+async function loadSource(url: string, fetchText: FetchText): Promise<Result<PlannedSource>> {
+  const media = await loadMedia(url, fetchText);
+  return media.ok ? sourceOf(media.value) : media;
+}
+
+async function planMaster(master: HlsMasterPlaylist, wanted: StreamVariant, fetchText: FetchText, soundOnly: boolean): Promise<Result<PlannedSource[]>> {
   if (master.protectedReason !== undefined) {
     return fail(PROTECTED);
   }
@@ -97,37 +103,39 @@ async function planMaster(master: HlsMasterPlaylist, wanted: StreamVariant, fetc
     return fail(NO_VARIANT);
   }
 
-  const media = await loadMedia(variant.variantId, fetchText);
-  if (!media.ok) {
-    return media;
+  const rendition = audioRenditionOf(master, variant);
+  if (soundOnly && rendition?.url !== undefined) {
+    // The sound has a playlist of its own: the picture is never fetched.
+    const sound = await loadSource(rendition.url, fetchText);
+    return sound.ok ? ok([sound.value]) : sound;
   }
-  const picture = sourceOf(media.value);
+
+  const picture = await loadSource(variant.variantId, fetchText);
   if (!picture.ok) {
     return picture;
   }
-
-  const rendition = audioRenditionOf(master, variant);
   if (rendition?.url === undefined) {
     return ok([picture.value]);
   }
 
-  const soundMedia = await loadMedia(rendition.url, fetchText);
-  const sound = soundMedia.ok ? sourceOf(soundMedia.value) : soundMedia;
+  const sound = await loadSource(rendition.url, fetchText);
   return sound.ok ? ok([picture.value, sound.value]) : sound;
 }
 
 /**
  * Plans the download of one HLS rendition: the picture (with its sound inside
- * the segments, or as a separate rendition of the master playlist).
+ * the segments, or as a separate rendition of the master playlist). With
+ * `soundOnly` a separate sound rendition is planned alone; a sound inside the
+ * picture's segments is taken out by the muxer.
  */
-export async function planHls(url: string, wanted: StreamVariant, fetchText: FetchText): Promise<Result<PlannedSource[]>> {
+export async function planHls(url: string, wanted: StreamVariant, fetchText: FetchText, soundOnly = false): Promise<Result<PlannedSource[]>> {
   const playlist = await loadPlaylist(url, fetchText);
   if (!playlist.ok) {
     return playlist;
   }
 
   if (playlist.value.kind === 'master') {
-    return planMaster(playlist.value, wanted, fetchText);
+    return planMaster(playlist.value, wanted, fetchText, soundOnly);
   }
 
   // A media playlist on its own is the only rendition.

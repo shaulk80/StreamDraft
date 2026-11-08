@@ -5,7 +5,17 @@ import { Builder, By, until } from 'selenium-webdriver';
 import * as firefox from 'selenium-webdriver/firefox.js';
 import { startTestPageServer } from '../pages/server.ts';
 import { extract, packageDir, readVersion } from './package-files.ts';
-import { dashFileProblem, DASH_FILE_NAME, hlsFileProblem, HLS_FILE_NAME, STREAM_PAGE } from './stream-download.ts';
+import {
+  AUDIO_FILE_COUNT,
+  audioFileNames,
+  audioFilesProblem,
+  dashFileProblem,
+  DASH_FILE_NAME,
+  hlsFileProblem,
+  HLS_FILE_NAME,
+  saveSoundScript,
+  STREAM_PAGE,
+} from './stream-download.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -305,6 +315,31 @@ async function checkStreamDownloads(driver: firefox.Driver, pageUrl: string, dow
   if (found.length === 0) {
     console.log('Firefox runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined and saved as readable MP4 files');
   }
+
+  await checkSoundDownloads(driver, downloadDir);
+}
+
+// "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
+// stream carries its sound inside the video segments and the engine takes it out.
+async function checkSoundDownloads(driver: firefox.Driver, downloadDir: string): Promise<void> {
+  for (let card = 0; card < AUDIO_FILE_COUNT; card++) {
+    await driver.executeScript(saveSoundScript(card));
+    try {
+      await driver.wait(() => audioFileNames(readdirSync(downloadDir)).length === card + 1, WAIT_MS);
+    } catch (error) {
+      console.error(error);
+      const said = await driver.executeScript<string[]>("return [...document.querySelectorAll('#media-list .result')].map((result) => result.textContent);");
+      problems.push(`firefox runtime: audio only: card ${card + 1} of ${AUDIO_FILE_COUNT}: no .m4a file arrived in the download folder, found [${readdirSync(downloadDir).join(', ')}]; the popup said [${said.join(' | ')}]`);
+      return;
+    }
+  }
+
+  const problem = audioFilesProblem(downloadDir, audioFileNames(readdirSync(downloadDir)));
+  if (problem === undefined) {
+    console.log('Firefox runtime: audio only: the DASH sound and the sound cut out of the HLS video were saved as .m4a files with one sound track each');
+    return;
+  }
+  problems.push(`firefox runtime: audio only: ${problem}`);
 }
 
 // The Refresh button must reach the page's content script and get its answer: the note

@@ -5,7 +5,17 @@ import path from 'node:path';
 import { startTestPageServer } from '../pages/server.ts';
 import { CdpConnection } from './cdp.ts';
 import { extract, packageDir, readVersion } from './package-files.ts';
-import { dashFileProblem, DASH_FILE_NAME, hlsFileProblem, HLS_FILE_NAME, STREAM_PAGE } from './stream-download.ts';
+import {
+  AUDIO_FILE_COUNT,
+  audioFileNames,
+  audioFilesProblem,
+  dashFileProblem,
+  DASH_FILE_NAME,
+  hlsFileProblem,
+  HLS_FILE_NAME,
+  saveSoundScript,
+  STREAM_PAGE,
+} from './stream-download.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
 //   1. unpack the zip and load it as an unpacked extension (Extensions.loadUnpacked);
@@ -213,6 +223,34 @@ async function checkStreamDownloads(browser: CdpConnection, port: number, extens
   if (found.length === 0 && closed) {
     console.log(`Chrome runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined in the offscreen document (seen open: ${String(sawOffscreen)}) and saved as readable MP4 files; the document closed afterwards`);
   }
+
+  await checkSoundDownloads(popup, offscreenOpen, downloadDir);
+}
+
+// "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
+// stream carries its sound inside the video segments and the engine takes it out.
+async function checkSoundDownloads(popup: Page, offscreenOpen: () => Promise<boolean>, downloadDir: string): Promise<void> {
+  for (let card = 0; card < AUDIO_FILE_COUNT; card++) {
+    await popup.evaluate(`(() => { ${saveSoundScript(card)} })()`);
+    const saved = await waitFor(async () => (audioFileNames(readdirSync(downloadDir)).length === card + 1 ? true : undefined));
+    if (!saved) {
+      problems.push(`chrome runtime: audio only: card ${card + 1} of ${AUDIO_FILE_COUNT}: no .m4a file arrived in the download folder, found [${readdirSync(downloadDir).join(', ')}]`);
+      return;
+    }
+  }
+
+  const problem = audioFilesProblem(downloadDir, audioFileNames(readdirSync(downloadDir)));
+  if (problem !== undefined) {
+    problems.push(`chrome runtime: audio only: ${problem}`);
+    return;
+  }
+
+  const closed = await waitFor(async () => ((await offscreenOpen()) ? undefined : true));
+  if (!closed) {
+    problems.push('chrome runtime: audio only: the offscreen document stayed open after both files were saved');
+    return;
+  }
+  console.log('Chrome runtime: audio only: the DASH sound and the sound cut out of the HLS video were saved as .m4a files with one sound track each');
 }
 
 async function checkDetectionAndDownload(

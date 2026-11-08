@@ -135,7 +135,7 @@ export class StreamEngine {
       return output;
     }
 
-    const joined = await muxStreams(plan.value.sources, files.value, output.value, { decryptor, signal });
+    const joined = await muxStreams(plan.value.sources, files.value, output.value, { decryptor, signal, soundOnly: plan.value.soundOnly });
     if (!joined.ok) {
       await output.value.abort();
       return joined;

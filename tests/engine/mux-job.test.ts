@@ -244,6 +244,75 @@ describe('muxStreams with fragmented MP4 sources', () => {
   });
 });
 
+describe('muxStreams keeping only the sound', () => {
+  /** One source whose init section holds a video track (id 1) and a sound track (id 2), as a muxed stream does. */
+  function muxedSource(store: MemorySegmentStore): MuxSource {
+    const sound: FixtureTrack = { id: 2, kind: 'audio', timescale: 1000 };
+    store.segments.set('m-init', initSegment([VIDEO, sound]));
+    store.segments.set(
+      'm-0',
+      mediaSegment([
+        { trackId: 1, startTime: 0, firstIndex: 0, samples: run(4, 10, 500) },
+        { trackId: 2, startTime: 0, firstIndex: 0, samples: run(2, 5, 1000) },
+      ]),
+    );
+    return { format: 'fmp4', init: { name: 'm-init' }, segments: [{ name: 'm-0' }] };
+  }
+
+  test('drops the picture of a stream that carries both and writes an .m4a', async () => {
+    const store = new MemorySegmentStore();
+
+    const { result, sink, file } = await mux([muxedSource(store)], store, { soundOnly: true });
+
+    expect(result).toMatchObject({ ok: true, value: { extension: 'm4a', audioOnly: true, durationSeconds: 2 } });
+    expect(file?.brand).toBe('M4A ');
+    expect(file?.tracks).toHaveLength(1);
+    const [track] = file?.tracks ?? [];
+    expect(track?.handler).toBe('soun');
+    expect(track?.samples.map((sample) => bytesOf(sink.bytes(), sample))).toEqual([sampleBytes(2, 0, 5), sampleBytes(2, 1, 5)]);
+  });
+
+  test('without the option the same stream keeps both tracks', async () => {
+    const store = new MemorySegmentStore();
+
+    const { result, file } = await mux([muxedSource(store)], store);
+
+    expect(result).toMatchObject({ ok: true, value: { extension: 'mp4' } });
+    expect(file?.tracks.map((track) => track.handler)).toEqual(['vide', 'soun']);
+  });
+
+  test('skips a source that is only picture, without reading its parts', async () => {
+    const store = new MemorySegmentStore();
+    const video = fmp4Source(store, 'v', VIDEO, [run(2, 3, 500)]);
+    store.segments.delete('v-0');
+    const audio = fmp4Source(store, 'a', AUDIO, [run(2, 3, 500)]);
+
+    const { result, file } = await mux([video, audio], store, { soundOnly: true });
+
+    expect(result).toMatchObject({ ok: true, value: { extension: 'm4a' } });
+    expect(file?.tracks.map((track) => track.handler)).toEqual(['soun']);
+  });
+
+  test('says so when the video has no sound', async () => {
+    const store = new MemorySegmentStore();
+
+    const { result } = await mux([fmp4Source(store, 'v', VIDEO, [run(2, 3, 500)])], store, { soundOnly: true });
+
+    expect(result).toEqual({ ok: false, error: 'This video has no sound to save.' });
+  });
+
+  test('takes the sound out of MPEG-TS segments', async () => {
+    const store = new MemorySegmentStore();
+    store.segments.set('t0', new Uint8Array(readFileSync(new URL('./fixtures/bipbop-gop-a.mpegts', import.meta.url))));
+
+    const { result, file } = await mux([{ format: 'ts', segments: [{ name: 't0' }] }], store, { soundOnly: true });
+
+    expect(result).toMatchObject({ ok: true, value: { extension: 'm4a', audioOnly: true } });
+    expect(file?.tracks.map((track) => track.handler)).toEqual(['soun']);
+    expect(file?.tracks[0]?.samples.length).toBeGreaterThan(0);
+  });
+});
+
 describe('muxStreams with MPEG-TS sources', () => {
   function fixture(name: string): Uint8Array {
     return new Uint8Array(readFileSync(new URL(`./fixtures/${name}`, import.meta.url)));

@@ -4,7 +4,7 @@ import type { FetchText } from '../detect/manifest-fetch.ts';
 import { planDash } from './dash-plan.ts';
 import type { MuxSource, StoredPart } from './fragment-sources.ts';
 import { planHls } from './hls-plan.ts';
-import { AUDIO_EXTRACTION_MISSING, NO_VARIANT, PROTECTED, type PlannedSource } from './plan-types.ts';
+import { NO_VARIANT, PROTECTED, type PlannedSource } from './plan-types.ts';
 import { segmentName } from './segment-job.ts';
 import type { SegmentRequest } from './segment-fetcher.ts';
 
@@ -18,10 +18,12 @@ export interface StreamPlan {
   sources: MuxSource[];
   /** Some part is AES-128 encrypted, so the muxer needs a decryptor. */
   encrypted: boolean;
+  /** Only the sound is wanted: the muxer drops the picture of any source that has one. */
+  soundOnly: boolean;
 }
 
 /** Gives every part of the sources its store name, in the order they are fetched. */
-export function assemblePlan(sources: readonly PlannedSource[]): StreamPlan {
+export function assemblePlan(sources: readonly PlannedSource[], soundOnly = false): StreamPlan {
   const requests: SegmentRequest[] = [];
   let encrypted = false;
 
@@ -38,7 +40,7 @@ export function assemblePlan(sources: readonly PlannedSource[]): StreamPlan {
     });
     return { format: source.format, init, segments };
   });
-  return { requests, sources: joined, encrypted };
+  return { requests, sources: joined, encrypted, soundOnly };
 }
 
 /**
@@ -55,20 +57,18 @@ export async function planStream(item: MediaItem, option: QualityOption, fetchTe
   if (variant === undefined) {
     return fail(NO_VARIANT);
   }
-  if (option.quality === 'audio' && variant.audioOnly !== true) {
-    return fail(AUDIO_EXTRACTION_MISSING);
-  }
 
-  const sources = await planSources(item, variant, fetchText);
-  return sources.ok ? ok(assemblePlan(sources.value)) : sources;
+  const soundOnly = option.quality === 'audio';
+  const sources = await planSources(item, variant, fetchText, soundOnly);
+  return sources.ok ? ok(assemblePlan(sources.value, soundOnly)) : sources;
 }
 
-async function planSources(item: MediaItem, variant: StreamVariant, fetchText: FetchText): Promise<Result<PlannedSource[]>> {
+async function planSources(item: MediaItem, variant: StreamVariant, fetchText: FetchText, soundOnly: boolean): Promise<Result<PlannedSource[]>> {
   switch (item.kind) {
     case 'hls':
-      return planHls(item.url, variant, fetchText);
+      return planHls(item.url, variant, fetchText, soundOnly);
     case 'dash':
-      return planDash(item.url, variant, fetchText);
+      return planDash(item.url, variant, fetchText, soundOnly);
     case 'direct':
       return fail('This is not a stream.');
   }
