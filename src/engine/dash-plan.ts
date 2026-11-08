@@ -38,9 +38,11 @@ function bestAudio(audio: readonly DashRepresentation[]): DashRepresentation | u
 
 /**
  * Plans the download of one DASH representation. A picture is joined with the
- * best audio representation; an audio representation stands on its own.
+ * best audio representation; an audio representation stands on its own. With
+ * `soundOnly` the best audio representation is planned alone when the manifest
+ * has one; otherwise the chosen representation is, and the muxer keeps its sound.
  */
-export async function planDash(url: string, wanted: StreamVariant, fetchText: FetchText): Promise<Result<PlannedSource[]>> {
+export async function planDash(url: string, wanted: StreamVariant, fetchText: FetchText, soundOnly = false): Promise<Result<PlannedSource[]>> {
   const fetched = await fetchText(url);
   if (!fetched.ok) {
     return fetched;
@@ -62,12 +64,16 @@ export async function planDash(url: string, wanted: StreamVariant, fetchText: Fe
     return fail(NO_VARIANT);
   }
 
+  const audio = chosen.audioOnly === true ? undefined : bestAudio(manifest.value.audio);
+  if (soundOnly && audio !== undefined) {
+    const sound = sourceOf(audio);
+    return sound.ok ? ok([sound.value]) : sound;
+  }
+
   const picture = sourceOf(chosen);
   if (!picture.ok) {
     return picture;
   }
-
-  const audio = chosen.audioOnly === true ? undefined : bestAudio(manifest.value.audio);
   if (audio === undefined) {
     return ok([picture.value]);
   }

@@ -101,7 +101,8 @@ const DASH = `<?xml version="1.0"?>
   </Period>
 </MPD>`;
 
-const DASH_LIVE = DASH.replace('type="static"', 'type="dynamic"');
+const DASH_VIDEO_ONLY = DASH.replace(/<AdaptationSet mimeType="audio\/mp4"[\s\S]*?<\/AdaptationSet>/, '');
+const DASH_LIVE =DASH.replace('type="static"', 'type="dynamic"');
 const DASH_PROTECTED = DASH.replace('<Representation id="v1"', '<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/><Representation id="v1"');
 
 const FILES: Record<string, string> = {
@@ -115,6 +116,7 @@ const FILES: Record<string, string> = {
   [`${CDN}/live.m3u8`]: LIVE_PLAYLIST,
   [`${CDN}/changing.m3u8`]: CHANGING_INIT_PLAYLIST,
   [`${CDN}/manifest.mpd`]: DASH,
+  [`${CDN}/video-only.mpd`]: DASH_VIDEO_ONLY,
   [`${CDN}/live.mpd`]: DASH_LIVE,
   [`${CDN}/protected.mpd`]: DASH_PROTECTED,
 };
@@ -141,6 +143,7 @@ describe('planStream for HLS', () => {
       ok: true,
       value: {
         encrypted: false,
+        soundOnly: false,
         requests: [
           { url: `${CDN}/seg0.ts` },
           { url: `${CDN}/seg1.ts` },
@@ -195,6 +198,22 @@ describe('planStream for HLS', () => {
     const plan = await planStream(itemOf('hls', 'master.m3u8'), optionOf(`${CDN}/audio-only.m3u8`, 'audio', { audioOnly: true }), fetchText);
 
     expect(plan.ok && plan.value.sources).toHaveLength(1);
+    expect(plan.ok && plan.value.soundOnly).toBe(true);
+  });
+
+  test('the sound of a rendition with a sound rendition of its own is taken from that rendition alone', async () => {
+    const plan = await planStream(itemOf('hls', 'master.m3u8'), optionOf(`${CDN}/v360.m3u8`, 'audio', { audioOnly: false }), fetchText);
+
+    expect(plan.ok && plan.value.requests.map((request) => request.url)).toEqual([`${CDN}/audio/a0.aac`, `${CDN}/audio/a1.aac`]);
+    expect(plan.ok && plan.value.sources.map((source) => source.format)).toEqual(['adts']);
+    expect(plan.ok && plan.value.soundOnly).toBe(true);
+  });
+
+  test('the sound inside the segments of a picture is left to the muxer: the picture is planned and marked sound only', async () => {
+    const plan = await planStream(itemOf('hls', 'master.m3u8'), optionOf(`${CDN}/v720.m3u8`, 'audio', { audioOnly: false }), fetchText);
+
+    expect(plan.ok && plan.value.requests.map((request) => request.url)).toEqual([`${CDN}/init.mp4`, `${CDN}/media.mp4`, `${CDN}/media.mp4`]);
+    expect(plan.ok && plan.value.soundOnly).toBe(true);
   });
 });
 
@@ -219,6 +238,20 @@ describe('planStream for DASH', () => {
 
     expect(plan.ok && plan.value.requests.map((request) => request.url)).toEqual([`${CDN}/a1/init.mp4`, `${CDN}/a1/seg-1.m4s`, `${CDN}/a1/seg-2.m4s`]);
   });
+
+  test('the sound of a picture comes from the richest sound representation alone', async () => {
+    const plan = await planStream(itemOf('dash', 'manifest.mpd'), optionOf('v1', 'audio', { audioOnly: false }), fetchText);
+
+    expect(plan.ok && plan.value.requests.map((request) => request.url)).toEqual([`${CDN}/a2/init.mp4`, `${CDN}/a2/seg-1.m4s`, `${CDN}/a2/seg-2.m4s`]);
+    expect(plan.ok && plan.value.soundOnly).toBe(true);
+  });
+
+  test('without a sound representation the picture is planned and the muxer keeps its sound', async () => {
+    const plan = await planStream(itemOf('dash', 'video-only.mpd'), optionOf('v1', 'audio', { audioOnly: false }), fetchText);
+
+    expect(plan.ok && plan.value.requests.map((request) => request.url)).toEqual([`${CDN}/v1/init.mp4`, `${CDN}/v1/seg-1.m4s`, `${CDN}/v1/seg-2.m4s`]);
+    expect(plan.ok && plan.value.soundOnly).toBe(true);
+  });
 });
 
 describe('planStream refusals', () => {
@@ -226,7 +259,6 @@ describe('planStream refusals', () => {
     ['a quality without a rendition', itemOf('hls', 'master.m3u8'), { quality: '720p', label: '720p' }, 'not available'],
     ['a rendition the playlist no longer lists', itemOf('hls', 'master.m3u8'), optionOf(`${CDN}/v999.m3u8`), 'not available'],
     ['a representation the manifest no longer lists', itemOf('dash', 'manifest.mpd'), optionOf('v9'), 'not available'],
-    ['sound taken out of a rendition with video', itemOf('hls', 'master.m3u8'), optionOf(`${CDN}/v360.m3u8`, 'audio', { audioOnly: false }), 'not available yet'],
     ['a live playlist', itemOf('hls', 'live.m3u8'), optionOf(`${CDN}/live.m3u8`, 'best'), 'Live'],
     ['a live manifest', itemOf('dash', 'live.mpd'), optionOf('v1'), 'Live'],
     ['a protected manifest', itemOf('dash', 'protected.mpd'), optionOf('v1'), 'DRM'],

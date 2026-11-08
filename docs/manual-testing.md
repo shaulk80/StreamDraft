@@ -90,7 +90,9 @@ Do each in Firefox, then in Chrome.
 - [ ] The popup shows two cards: `127.0.0.1 · DASH stream · mp4` (360p, Audio only) and `127.0.0.1 · HLS stream · mp4`.
 - [ ] Download on the DASH card: the popup says `Saving as "StreamDraft stream download test page [360p].mp4".` and the file appears in the download folder after a moment, a few KB. The HLS card saves `... [original].mp4`. (The pictures are made-up bytes: the files are valid MP4 structure but do not play.)
 - [ ] Chrome only: the engine runs in an offscreen document that exists only while a download runs (the smoke test sees it open and then closed; whether `chrome://extensions` lists it under Inspect views is not checked).
-- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten.
+- [ ] Pick "Audio only" on the DASH card and press Download: the file `... [audio].m4a` is saved (a sound track of 4 samples, a few KB). On the HLS card the sound is cut out of the video segments: `... [audio].m4a` again, named with `(1)` after the first. (Made-up bytes: the files have valid structure but do not play.)
+- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads one after the other: two downloads of one name started in the same instant sometimes make Firefox interrupt one of them (seen in the smoke test; the popup does not report it yet, task 11).
+- [ ] Real streams, audio only: on a public page with a plain HLS or DASH video, pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. A video without a sound track should end with "This video has no sound to save." (shown once task 11 reports failures).
 - [ ] Firefox private window: Download says the browser would not give the extension space (OPFS is not available there). Not verified yet.
 - [ ] Real streams: on a public page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
 

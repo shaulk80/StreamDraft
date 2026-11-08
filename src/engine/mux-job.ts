@@ -1,5 +1,6 @@
 import { fail, ok, type Result } from '../core/result.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
+import { NO_SOUND } from './plan-types.ts';
 import { createFragmentSource, PartLoader, type FragmentSource, type MuxSource } from './fragment-sources.ts';
 import { FlatMp4Writer, type FlatMp4Summary } from './mp4/flat-writer.ts';
 import type { SegmentDecryptor } from './segment-decryptor.ts';
@@ -16,6 +17,8 @@ export interface MuxOptions {
   decryptor?: SegmentDecryptor;
   onProgress?: (progress: MuxProgress) => void;
   signal?: AbortSignal;
+  /** Keep only the sound tracks; sources without any are skipped, and no sound at all is an error. */
+  soundOnly?: boolean;
 }
 
 export interface MuxResult extends FlatMp4Summary {
@@ -48,7 +51,7 @@ function mostBehind(sources: readonly OpenSource[]): OpenSource | undefined {
   return behind;
 }
 
-async function openSources(sources: readonly MuxSource[], loader: PartLoader, writer: FlatMp4Writer): Promise<Result<OpenSource[]>> {
+async function openSources(sources: readonly MuxSource[], loader: PartLoader, writer: FlatMp4Writer, soundOnly: boolean): Promise<Result<OpenSource[]>> {
   const opened: OpenSource[] = [];
   for (const description of sources) {
     const source = createFragmentSource(description, loader);
@@ -58,11 +61,18 @@ async function openSources(sources: readonly MuxSource[], loader: PartLoader, wr
       return tracks;
     }
 
+    const wanted = soundOnly ? tracks.value.filter((track) => track.kind === 'audio') : tracks.value;
+    if (wanted.length === 0) {
+      source.close();
+      continue;
+    }
+
     const trackIds = new Map<number, number>();
     const timescales = new Map<number, number>();
-    for (const track of tracks.value) {
+    for (const track of wanted) {
       const id = writer.addTrack(track);
       if (!id.ok) {
+        source.close();
         return id;
       }
       trackIds.set(track.sourceId, id.value);
@@ -70,7 +80,7 @@ async function openSources(sources: readonly MuxSource[], loader: PartLoader, wr
     }
     opened.push({ source, trackIds, timescales, trackSeconds: new Map(), seconds: 0, done: false });
   }
-  return ok(opened);
+  return opened.length === 0 ? fail(NO_SOUND) : ok(opened);
 }
 
 /** Writes the next segment of a source; marks the source done at its end. */
@@ -116,7 +126,7 @@ export async function muxStreams(sources: readonly MuxSource[], store: SegmentSt
 
   const writer = new FlatMp4Writer(sink);
   const loader = new PartLoader(store, options.decryptor);
-  const opened = await openSources(sources, loader, writer);
+  const opened = await openSources(sources, loader, writer, options.soundOnly === true);
   if (!opened.ok) {
     return opened;
   }
