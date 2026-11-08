@@ -81,14 +81,38 @@ describe('classifyCandidate: accepted', () => {
   });
 });
 
+describe('classifyCandidate: streams', () => {
+  test.each<[string, Parameters<typeof classifyCandidate>[0], 'hls' | 'dash']>([
+    ['HLS by extension', { url: 'https://cdn.example.com/v/master.m3u8?token=abc', pageTitle: 'Talk' }, 'hls'],
+    ['HLS by content type', { url: 'https://cdn.example.com/playlist', contentType: 'application/vnd.apple.mpegurl' }, 'hls'],
+    ['DASH by extension', { url: 'https://cdn.example.com/v/manifest.mpd', pageTitle: 'Talk' }, 'dash'],
+    ['DASH by content type', { url: 'https://cdn.example.com/manifest', contentType: 'application/dash+xml' }, 'dash'],
+  ])('%s gives a stream that waits for its manifest', (_name, candidate, kind) => {
+    const result = classifyCandidate({ sizeBytes: 800, ...candidate });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { kind, container: 'mp4', qualities: [], protected: false },
+    });
+  });
+
+  test('a manifest is not too small, whatever its size', () => {
+    expect(classifyCandidate({ url: 'https://example.com/a.m3u8', sizeBytes: 120 }).ok).toBe(true);
+  });
+
+  test('the query stays in the address: tokens are part of what is fetched', () => {
+    const result = classifyCandidate({ url: 'https://example.com/a.m3u8?token=abc#x' });
+
+    expect(result.ok && result.value.url).toBe('https://example.com/a.m3u8?token=abc');
+  });
+});
+
 describe('classifyCandidate: rejected', () => {
   test.each<[string, Parameters<typeof classifyCandidate>[0], string]>([
     ['not an address', { url: 'not a url' }, 'valid address'],
     ['blob source', { url: 'blob:https://example.com/1234', contentType: 'video/mp4' }, 'http and https'],
     ['data source', { url: 'data:video/mp4;base64,AAAA', contentType: 'video/mp4' }, 'http and https'],
     ['a page', { url: 'https://example.com/index.html', contentType: 'text/html' }, 'Not a video'],
-    ['hls manifest', { url: 'https://example.com/master.m3u8' }, 'HLS'],
-    ['dash manifest', { url: 'https://example.com/manifest.mpd' }, 'DASH'],
     ['one byte under the minimum', { url: 'https://example.com/a.mp4', contentType: 'video/mp4', sizeBytes: MIN_DIRECT_SIZE_BYTES - 1 }, 'small'],
   ])('%s', (_name, candidate, messagePart) => {
     const result = classifyCandidate(candidate);

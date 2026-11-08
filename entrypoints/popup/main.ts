@@ -1,11 +1,11 @@
 import type { MediaItem } from '../../src/core/media.ts';
 import { MOCK_MEDIA } from '../../src/core/mock-media.ts';
-import { PING, rescanMediaMessage, type PongPayload } from '../../src/core/messages.ts';
+import { PING, rescanMediaMessage, resolveStreamsMessage, type PongPayload } from '../../src/core/messages.ts';
 import type { Result } from '../../src/core/result.ts';
 import type { Settings } from '../../src/core/settings.ts';
 import { MediaRegistry, registryKey } from '../../src/detect/registry.ts';
 import { backgroundDownloadAction, demoDownloadAction, type DownloadAction } from '../../src/ui/download-client.ts';
-import { renderMediaList } from '../../src/ui/media-view.ts';
+import { listSignature, renderMediaList } from '../../src/ui/media-view.ts';
 import { refreshVideos } from '../../src/ui/refresh.ts';
 import { SettingsStore } from '../../src/ui/settings-store.ts';
 
@@ -71,7 +71,7 @@ async function showTabVideos(
   const refresh = async (force: boolean): Promise<number> => {
     const items = await registry.list(tabId);
     // Redrawing would reset a quality choice the user just made; unless asked to, only redraw for new videos.
-    const signature = items.map((item) => item.id).join('\n');
+    const signature = listSignature(items);
     if (force || signature !== shown) {
       shown = signature;
       renderMediaList(list, emptyNotice, items, settings, download);
@@ -84,8 +84,23 @@ async function showTabVideos(
       void refresh(false);
     }
   });
-  wireRefreshButton(tabId, () => refresh(true));
+  const resolveStreams = (): Promise<void> => askToReadStreams(tabId);
+  wireRefreshButton(tabId, async () => {
+    await resolveStreams();
+    return refresh(true);
+  });
   await refresh(false);
+  // The streams show up as "reading" first; the redraw comes with the storage change.
+  await resolveStreams();
+}
+
+/** Asks the background to read the manifests of the tab's streams. A failure only leaves them unread. */
+async function askToReadStreams(tabId: number): Promise<void> {
+  try {
+    await browser.runtime.sendMessage(resolveStreamsMessage(tabId));
+  } catch (error) {
+    console.error('StreamDraft: the background did not read the streams', error);
+  }
 }
 
 /** The Refresh button: the page looks at its videos again, then the list is read again. */

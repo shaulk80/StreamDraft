@@ -2,12 +2,15 @@ import {
   handleMessage,
   parseDownloadMediaMessage,
   parseFoundMediaMessage,
+  parseResolveStreamsMessage,
   showTextMessage,
 } from '../src/core/messages.ts';
 import { DownloadService } from '../src/engine/download-service.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
+import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
+import { StreamResolver } from '../src/detect/stream-resolver.ts';
 import { fail, ok } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
@@ -21,6 +24,7 @@ export default defineBackground(() => {
   );
 
   const registry = new MediaRegistry(browser.storage.session);
+  const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
   const downloads = new DownloadService({
     downloads: browser.downloads,
     listItems: (tabId) => registry.list(tabId),
@@ -39,6 +43,12 @@ export default defineBackground(() => {
       }
       // Answered after the videos are stored: a page that rescans on request waits for it.
       return addPageCandidates(registry, sender.tab.id, found.value).then((count) => ok(count));
+    }
+
+    const resolve = parseResolveStreamsMessage(message);
+    if (resolve.ok) {
+      // Only the popup asks; it names the tab it is shown over.
+      return resolver.resolveTab(resolve.value).then((count) => ok(count));
     }
 
     const download = parseDownloadMediaMessage(message);

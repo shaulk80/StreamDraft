@@ -73,13 +73,25 @@ describe('NetworkObserver.handleResponse', () => {
     ['a not-found page', { statusCode: 404 }],
     ['an image', { url: 'https://example.com/a.png', responseHeaders: [{ name: 'content-type', value: 'image/png' }] }],
     ['an ad clip that is tiny', { responseHeaders: [{ name: 'content-type', value: 'video/mp4' }, { name: 'content-length', value: '900' }] }],
-    ['an HLS manifest (M3)', { url: 'https://example.com/a.m3u8', responseHeaders: [] }],
+    ['an HLS segment', { url: 'https://example.com/seg1.ts', responseHeaders: [{ name: 'content-type', value: 'video/mp2t' }] }],
   ])('ignores %s', async (_name, overrides) => {
     const { observer, registry } = createObserver();
 
     await observer.handleResponse(response(overrides));
 
     expect(registry.add).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['an HLS playlist', 'https://cdn.example.com/a.m3u8', 'application/vnd.apple.mpegurl', 'hls'],
+    ['a DASH manifest', 'https://cdn.example.com/a.mpd', 'application/dash+xml', 'dash'],
+    ['a playlist sent as plain text', 'https://cdn.example.com/a.m3u8', 'text/plain', 'hls'],
+  ])('lists %s as a stream', async (_name, url, contentType, kind) => {
+    const { observer, items } = createObserver();
+
+    await observer.handleResponse(response({ url, responseHeaders: [{ name: 'content-type', value: contentType }] }));
+
+    expect(items).toMatchObject([{ kind, url, title: 'Watch me', qualities: [] }]);
   });
 
   test('a file seen again does not look the tab up again', async () => {

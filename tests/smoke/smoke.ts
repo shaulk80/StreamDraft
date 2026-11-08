@@ -230,6 +230,46 @@ async function checkDetection(driver: firefox.Driver, pageUrl: string, downloadD
   await checkDownload(driver, downloadDir);
 }
 
+// HLS and DASH: the page loads a master playlist, one of its rendition playlists (which must
+// not be listed) and a DASH manifest. The popup reads the manifests when it opens and offers
+// their qualities.
+const STREAMS_PAGE = 'streams.html';
+const EXPECTED_STREAM_CARDS = [
+  { meta: '127.0.0.1 · DASH stream · mp4', options: ['720p (8.9 MB)', '360p (2.9 MB)', 'Audio only (234 KB)'] },
+  { meta: '127.0.0.1 · HLS stream · mp4', options: ['720p', '360p', 'Audio only'] },
+];
+
+interface StreamCard {
+  meta: string;
+  options: string[];
+}
+
+async function streamCards(driver: firefox.Driver): Promise<string> {
+  const cards = await driver.executeScript<StreamCard[]>(
+    "return [...document.querySelectorAll('#media-list .card')].map((card) => ({ meta: card.querySelector('.meta')?.textContent ?? '', options: [...card.querySelectorAll('.quality option')].map((option) => option.textContent) }));",
+  );
+  return JSON.stringify([...cards].sort((left, right) => left.meta.localeCompare(right.meta)));
+}
+
+async function checkStreams(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${STREAMS_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  const pattern = `http://127.0.0.1/${STREAMS_PAGE}*`;
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${encodeURIComponent(pattern)}`);
+
+  const expected = JSON.stringify(EXPECTED_STREAM_CARDS);
+  try {
+    await driver.wait(async () => (await streamCards(driver)) === expected, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: streams: expected ${expected}, popup shows ${await streamCards(driver)}`);
+    return;
+  }
+  console.log('Firefox runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
+}
+
 // The Refresh button must reach the page's content script and get its answer: the note
 // says so and the list stays complete. (Emptying the saved list first, to see the page's files
 // come back, is done in the Chrome test: Firefox's test scripts cannot reach the extension API.)
@@ -464,6 +504,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkOverlay(driver, testPage.url);
       await checkContextMenu(driver, testPage.url);
       await checkDetection(driver, testPage.url, downloadDir);
+      await checkStreams(driver, testPage.url);
     } finally {
       await testPage.close();
     }

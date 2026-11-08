@@ -28,11 +28,16 @@ describe('itemOfElement', () => {
     expect(item?.id).toBe('https://cdn.example.com/a.mp4');
   });
 
+  test('a video whose source is a manifest gives a stream item', () => {
+    const item = itemOfElement(element({ currentSrc: 'https://example.com/master.m3u8' }), PAGE);
+
+    expect(item).toMatchObject({ kind: 'hls', qualities: [] });
+  });
+
   test.each<[string, MediaElementInfo]>([
     ['no file chosen yet', element({})],
     ['a blob stream', element({ currentSrc: 'blob:https://example.com/1234' })],
     ['a file type that is not media', element({ currentSrc: 'https://example.com/a.html' })],
-    ['a stream manifest', element({ currentSrc: 'https://example.com/master.m3u8' })],
   ])('%s gives nothing', (_name, info) => {
     expect(itemOfElement(info, PAGE)).toBeUndefined();
   });

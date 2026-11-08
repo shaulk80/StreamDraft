@@ -1,4 +1,4 @@
-import type { MediaItem } from '../core/media.ts';
+import type { MediaItem, StreamDetails } from '../core/media.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import { mergeItem } from './merge.ts';
 
@@ -30,6 +30,22 @@ export function tabIdFromKey(key: string): number | undefined {
     return undefined;
   }
   return Number(digits);
+}
+
+/** What reading one stream's manifest found out, for the item with this id. */
+export interface ResolvedStream {
+  id: string;
+  details: StreamDetails;
+}
+
+/** True when a stream in the list names `id` as one of its parts (a rendition's playlist). */
+function isPartOfAStream(items: readonly MediaItem[], id: string): boolean {
+  return items.some((item) => item.id !== id && item.partUrls?.includes(id) === true);
+}
+
+function withDetails(item: MediaItem, details: StreamDetails): MediaItem {
+  // Cleared first, so details without an error or a reason also remove an old one.
+  return { ...item, manifestError: undefined, protectedReason: undefined, partUrls: undefined, ...details };
 }
 
 function isStoredItem(value: unknown): value is MediaItem {
@@ -75,6 +91,11 @@ export class MediaRegistry {
         return current;
       }
 
+      // A player loads the playlists of a stream's renditions too; they are not videos of their own.
+      if (isPartOfAStream(current.value, item.id)) {
+        return ok(current.value);
+      }
+
       const merged = this.cap(mergeItem(current.value, item));
       if (JSON.stringify(merged) === JSON.stringify(current.value)) {
         return ok(current.value);
@@ -102,6 +123,32 @@ export class MediaRegistry {
         return current;
       }
       return this.write(tabId, retitled);
+    });
+  }
+
+  /**
+   * Stores what reading the manifests found out. Only the manifest's facts are
+   * written, so a title set in the meantime is kept; an item that is gone (the
+   * tab navigated) is left out. Items that turned out to be parts of a stream
+   * (the playlists of a master playlist's renditions) are dropped.
+   */
+  update(tabId: number, resolved: readonly ResolvedStream[]): Promise<Result<MediaItem[]>> {
+    return this.enqueue(async () => {
+      const current = await this.read(tabId);
+      if (!current.ok) {
+        return current;
+      }
+
+      const detailsById = new Map(resolved.map((entry) => [entry.id, entry.details]));
+      const updated = current.value.map((item) => {
+        const details = detailsById.get(item.id);
+        return details === undefined ? item : withDetails(item, details);
+      });
+      const kept = updated.filter((item) => !isPartOfAStream(updated, item.id));
+      if (JSON.stringify(kept) === JSON.stringify(current.value)) {
+        return ok(current.value);
+      }
+      return this.write(tabId, kept);
     });
   }
 
