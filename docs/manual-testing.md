@@ -42,6 +42,7 @@ Leave it running. Four pages, all on `http://127.0.0.1:8123/`:
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
 | Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
+| Job display page | `/jobs.html` | a slow and a broken stream: progress, Cancel, failure text (M3) |
 
 The media files are filler bytes with the right content type. They do not play (the player shows an error), but they download. Sizes: `direct.mp4` 300 KB, `clip.webm` 250 KB, `song.mp3` 200 KB, `late.mp4` 220 KB, `hidden-stream` 400 KB, `tiny.mp4` 2 KB.
 
@@ -83,16 +84,23 @@ Do each in Firefox, then in Chrome.
 **Streams page** (`/streams.html`, M3):
 - [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
 - [ ] The rendition playlist the page loads (`v720/index.m3u8`) is not a card of its own. The badge counts 2.
-- [ ] Download on these streams starts a job that fails (their segments do not exist on this page): the popup still says "Saving as ..." and nothing is saved, because the popup does not show a job's progress or failure yet (task 11). Use the download page below for a download that works.
+- [ ] Download on these streams starts a job that fails (their segments do not exist on this page): the card ends with "Could not save the video." and the server's answer (e.g. "Segment 1 of 3: The server answered 404."; the numbers depend on the stream), the Download button comes back, nothing is saved. Use the download page below for a download that works.
 - [ ] Stop `pnpm run testpage`, reload the popup on a fresh tab of the page: the cards say the playlist could not be loaded, and read fine again after you restart the server and press Refresh.
 
-**Stream download page** (`/download.html`, M3 task 9; the popup still has no progress bar, that is task 11):
+**Stream download page** (`/download.html`, M3 task 9):
 - [ ] The popup shows two cards: `127.0.0.1 · DASH stream · mp4` (360p, Audio only) and `127.0.0.1 · HLS stream · mp4`.
-- [ ] Download on the DASH card: the popup says `Saving as "StreamDraft stream download test page [360p].mp4".` and the file appears in the download folder after a moment, a few KB. The HLS card saves `... [original].mp4`. (The pictures are made-up bytes: the files are valid MP4 structure but do not play.)
+- [ ] Download on the DASH card: the Download button waits, the card shows "Starting..." or a progress bar (it is over quickly), then "Saved to your downloads folder.", the button comes back, and the file `StreamDraft stream download test page [360p].mp4` is in the download folder, a few KB. The HLS card saves `... [original].mp4`. (The pictures are made-up bytes: the files are valid MP4 structure but do not play.)
 - [ ] Chrome only: the engine runs in an offscreen document that exists only while a download runs (the smoke test sees it open and then closed; whether `chrome://extensions` lists it under Inspect views is not checked).
 - [ ] Pick "Audio only" on the DASH card and press Download: the file `... [audio].m4a` is saved (a sound track of 4 samples, a few KB). On the HLS card the sound is cut out of the video segments: `... [audio].m4a` again, named with `(1)` after the first. (Made-up bytes: the files have valid structure but do not play.)
-- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads one after the other: two downloads of one name started in the same instant sometimes make Firefox interrupt one of them (seen in the smoke test; the popup does not report it yet, task 11).
-- [ ] Real streams, audio only: on a public page with a plain HLS or DASH video, pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. A video without a sound track should end with "This video has no sound to save." (shown once task 11 reports failures).
+- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads one after the other: two downloads of one name started in the same instant sometimes make Firefox interrupt one of them (seen in the smoke test); the card then says "Could not save the video. The browser could not save the finished video."
+- [ ] Real streams, audio only: on a public page with a plain HLS or DASH video, pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. A video without a sound track should end with "Could not save the video. This video has no sound to save."
+**Job display page** (`/jobs.html`, M3 task 11): the popup lists two HLS streams of the same title; the first has 40 parts of 0.4 seconds each, in the second the second part is missing.
+- [ ] Download on the first card: the button is disabled, a progress bar fills and the line says "Downloading: 12% (...)" with a growing size; a Cancel button sits next to it.
+- [ ] While it runs, close the popup and open it again: the card shows the running job again (bar, text, Cancel), and the Download button is disabled.
+- [ ] Press Cancel: the line says "Cancelled.", the bar and Cancel disappear, the Download button comes back, nothing is saved. In Chrome the offscreen document closes.
+- [ ] Download on the second card: the line says "Could not save the video." with the server's answer ("Segment 2 of 2: The server answered 404."); the Download button comes back.
+- [ ] Let the first card run to the end (about 5 seconds): the bar fills, "Joining the parts and saving..." (no Cancel), then "Saved to your downloads folder."
+- [ ] A job whose background was killed (close the browser during a download, start it again, open the popup): the card does not show a stale job forever; after 10 minutes without news it is forgotten.
 - [ ] Firefox private window: Download says the browser would not give the extension space (OPFS is not available there). Not verified yet.
 - [ ] Real streams: on a public page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
 
@@ -104,7 +112,7 @@ Do each in Firefox, then in Chrome.
 - No button or toast for videos inside iframes; no button in fullscreen.
 - Downloads do not send the page's `Referer`: hosts that check it refuse.
 - A download that fails after it started (server error) is not reported yet (M6).
-- Streams (HLS, DASH) download (M3 task 9) but show no progress or cancel button yet (task 11), and "Audio only" taken out of a video's own sound is refused (task 10). Protected videos are never downloaded.
+- Cancel works while the parts are being fetched; the last step (joining the parts and handing the file to the browser) cannot be stopped from the popup. Protected videos are never downloaded.
 - Temporary files of a stream download that was cut off by a browser crash stay in the extension's private storage until a later version cleans them (M6).
 - Live streams and DASH with several periods are listed with an error for now.
 - A stream's manifest is read by the extension without the page's `Referer`: hosts that check it make the card say the playlist could not be loaded.
@@ -115,6 +123,6 @@ Do each in Firefox, then in Chrome.
 
 So you can skip it, or look only at how it feels:
 
-- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; the two generated streams of `/download.html` download and are readable MP4 files (DASH: picture and sound); options page keeps a setting and rejects a bad template.
-- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name; the two generated streams of `/download.html` download through the offscreen document and the document closes afterwards.
+- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; the two generated streams of `/download.html` download, are readable MP4 files (DASH: picture and sound) and end as "Saved to your downloads folder."; on `/jobs.html` a slow stream shows its progress (also in a popup opened again) and is cancelled, a stream with a missing part ends with the failure text; options page keeps a setting and rejects a bad template.
+- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name; the two generated streams of `/download.html` download through the offscreen document and the document closes afterwards; the same progress, Cancel and failure checks on `/jobs.html`.
 - Not covered by any test: how it looks, the toolbar badge, the right-click entry in Chrome, loading the way a user does (Firefox signed install, Chrome Load unpacked).

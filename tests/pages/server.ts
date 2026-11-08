@@ -13,6 +13,7 @@ const PAGES: Readonly<Record<string, string>> = {
   '/detect.html': 'detect.html',
   '/streams.html': 'streams.html',
   '/download.html': 'download.html',
+  '/jobs.html': 'jobs.html',
 };
 
 // Streams with real (tiny) segments, built once: the download tests fetch them.
@@ -116,7 +117,9 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
   const generated = GENERATED.get(pathname);
   if (generated !== undefined) {
     response.setHeader('Content-Type', generated.contentType);
-    response.end(generated.body);
+    const body = generated.body;
+    // A slow file: the answer is held back; the connection closing meanwhile (a cancelled job) is harmless.
+    setTimeout(() => response.end(body), generated.delayMs ?? 0);
     return;
   }
 
@@ -148,5 +151,5 @@ export function startTestPageServer(port: number): Promise<TestPageServer> {
 
 if (import.meta.main) {
   const started = await startTestPageServer(8123);
-  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download)  (Ctrl+C to stop)`);
+  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream)  (Ctrl+C to stop)`);
 }

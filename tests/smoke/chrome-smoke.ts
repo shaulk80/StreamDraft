@@ -16,6 +16,7 @@ import {
   saveSoundScript,
   STREAM_PAGE,
 } from './stream-download.ts';
+import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
 //   1. unpack the zip and load it as an unpacked extension (Extensions.loadUnpacked);
@@ -224,7 +225,57 @@ async function checkStreamDownloads(browser: CdpConnection, port: number, extens
     console.log(`Chrome runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined in the offscreen document (seen open: ${String(sawOffscreen)}) and saved as readable MP4 files; the document closed afterwards`);
   }
 
+  const unsaved = await savedTextProblem(
+    {
+      act: async () => undefined,
+      read: (expression) => popup.evaluate<string>(expression),
+      reload: async () => undefined,
+    },
+    expected.length,
+  );
+  if (unsaved !== undefined) {
+    problems.push('chrome runtime: stream download: ' + unsaved);
+  }
+
   await checkSoundDownloads(popup, offscreenOpen, downloadDir);
+}
+
+// The popup's job display: progress of a slow stream (also in a popup opened again), Cancel, and the
+// words for a stream whose part is missing (tests/pages/jobs.html).
+async function checkJobs(browser: CdpConnection, extensionId: string, pageUrl: string): Promise<void> {
+  const page = await Page.open(browser, `${pageUrl}${JOBS_PAGE}`);
+  const fetched = await waitFor(async () =>
+    (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched') ? true : undefined,
+  );
+  if (!fetched) {
+    problems.push('chrome runtime: the job display test page did not finish loading');
+    return;
+  }
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${JOBS_PAGE}*`);
+  const popupPage = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
+  const twoStreams = (): Promise<true | undefined> =>
+    waitFor(async () => ((await popupPage.evaluate<number>("document.querySelectorAll('#media-list .download').length")) === 2 ? true : undefined));
+  if (!(await twoStreams())) {
+    problems.push('chrome runtime: job display: the popup did not list two streams with qualities');
+    return;
+  }
+
+  const popup: PopupPage = {
+    act: async (statements) => {
+      await popupPage.evaluate(`(() => { ${statements} })()`);
+    },
+    read: (expression) => popupPage.evaluate<string>(expression),
+    reload: async () => {
+      await popupPage.evaluate('location.reload()');
+      await twoStreams();
+    },
+  };
+  const found = await checkJobDisplay(popup);
+  found.forEach((problem) => problems.push(`chrome runtime: job display: ${problem}`));
+  if (found.length === 0) {
+    console.log('Chrome runtime: job display: a slow stream showed its progress (also in a popup opened again) and was cancelled, a stream with a missing part ended with the failure text');
+  }
 }
 
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
@@ -426,6 +477,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
     await checkStreams(browser, extensionId, server.url);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
+    await checkJobs(browser, extensionId, server.url);
     await checkOverlay(browser, server.url, downloadDir);
   } catch (error) {
     console.error(error);

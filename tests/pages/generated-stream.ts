@@ -11,6 +11,8 @@ import { initSegment, mediaSegment, type FixtureTrack } from '../engine/mp4-fixt
 export interface GeneratedFile {
   contentType: string;
   body: Uint8Array | string;
+  /** The server waits this long before it answers; makes a stream slow enough to watch and cancel. */
+  delayMs?: number;
 }
 
 const DASH_MANIFEST = `<?xml version="1.0"?>
@@ -58,6 +60,32 @@ function addRepresentation(files: Map<string, GeneratedFile>, folder: string, tr
   }
 }
 
+const HLS_TYPE = 'application/vnd.apple.mpegurl';
+const SLOW_SEGMENTS = 40;
+const SLOW_DELAY_MS = 400;
+
+function playlistOf(segmentNames: readonly string[]): string {
+  const lines = segmentNames.flatMap((name) => ['#EXTINF:2.0,', name]);
+  return ['#EXTM3U', '#EXT-X-VERSION:3', '#EXT-X-TARGETDURATION:2', '#EXT-X-MEDIA-SEQUENCE:0', '#EXT-X-PLAYLIST-TYPE:VOD', ...lines, '#EXT-X-ENDLIST', ''].join('\n');
+}
+
+/**
+ * Two streams for the popup's job display (`/jobs.html`):
+ *  - slow: 40 real segments of 400 ms each, long enough to see the progress and cancel the job;
+ *  - broken: two segments, the second one is missing, so the job fails with a server error.
+ */
+function addJobStreams(files: Map<string, GeneratedFile>): void {
+  const segment = readFileSync(path.join(FIXTURES, 'bipbop-gop-a.mpegts'));
+  const slowNames = Array.from({ length: SLOW_SEGMENTS }, (_, number) => `seg${number}.ts`);
+  files.set('/gen/slow/index.m3u8', { contentType: HLS_TYPE, body: playlistOf(slowNames) });
+  for (const name of slowNames) {
+    files.set(`/gen/slow/${name}`, { contentType: 'video/mp2t', body: segment, delayMs: SLOW_DELAY_MS });
+  }
+
+  files.set('/gen/broken/index.m3u8', { contentType: HLS_TYPE, body: playlistOf(['seg0.ts', 'seg1.ts']) });
+  files.set('/gen/broken/seg0.ts', { contentType: 'video/mp2t', body: segment });
+}
+
 /** The generated stream files by request path. */
 export function generatedStreamFiles(): Map<string, GeneratedFile> {
   const files = new Map<string, GeneratedFile>();
@@ -68,5 +96,6 @@ export function generatedStreamFiles(): Map<string, GeneratedFile> {
   files.set('/gen/hls/index.m3u8', { contentType: 'application/vnd.apple.mpegurl', body: HLS_PLAYLIST });
   files.set('/gen/hls/seg0.ts', { contentType: 'video/mp2t', body: readFileSync(path.join(FIXTURES, 'bipbop-gop-a.mpegts')) });
   files.set('/gen/hls/seg1.ts', { contentType: 'video/mp2t', body: readFileSync(path.join(FIXTURES, 'bipbop-gop-b.mpegts')) });
+  addJobStreams(files);
   return files;
 }

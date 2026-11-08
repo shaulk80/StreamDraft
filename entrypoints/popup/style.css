@@ -106,3 +106,28 @@ footer {
   gap: 0.1rem;
   margin-top: 0.75rem;
 }
+
+.job {
+  margin-top: 0.4rem;
+}
+
+.job-bar {
+  width: 100%;
+}
+
+.job-line {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.job-line .result {
+  margin: 0.2rem 0 0;
+}
+
+.cancel {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.1rem 0.6rem;
+}

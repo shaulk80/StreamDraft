@@ -16,6 +16,7 @@ import {
   saveSoundScript,
   STREAM_PAGE,
 } from './stream-download.ts';
+import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -316,7 +317,56 @@ async function checkStreamDownloads(driver: firefox.Driver, pageUrl: string, dow
     console.log('Firefox runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined and saved as readable MP4 files');
   }
 
+  const unsaved = await savedTextProblem(
+    {
+      act: async () => undefined,
+      read: (expression) => driver.executeScript<string | undefined>('return ' + expression + ';'),
+      reload: async () => undefined,
+    },
+    expected.length,
+  );
+  if (unsaved !== undefined) {
+    problems.push('firefox runtime: stream download: ' + unsaved);
+  }
+
   await checkSoundDownloads(driver, downloadDir);
+}
+
+// The popup's job display: progress of a slow stream (also in a popup opened again), Cancel, and the
+// words for a stream whose part is missing (tests/pages/jobs.html).
+async function checkJobs(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${JOBS_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${JOBS_PAGE}*`);
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${pattern}`);
+  const twoStreams = async (): Promise<void> => {
+    await driver.wait(async () => (await driver.findElements(By.css('#media-list .download'))).length === 2, WAIT_MS);
+  };
+  try {
+    await twoStreams();
+  } catch (error) {
+    console.error(error);
+    problems.push('firefox runtime: job display: the popup did not list two streams with qualities');
+    return;
+  }
+
+  const popup: PopupPage = {
+    act: async (statements) => {
+      await driver.executeScript(statements);
+    },
+    read: (expression) => driver.executeScript<string | undefined>(`return ${expression};`),
+    reload: async () => {
+      await driver.navigate().refresh();
+      await twoStreams();
+    },
+  };
+  const found = await checkJobDisplay(popup);
+  found.forEach((problem) => problems.push(`firefox runtime: job display: ${problem}`));
+  if (found.length === 0) {
+    console.log('Firefox runtime: job display: a slow stream showed its progress (also in a popup opened again) and was cancelled, a stream with a missing part ended with the failure text');
+  }
 }
 
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
@@ -578,6 +628,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkDetection(driver, testPage.url, downloadDir);
       await checkStreams(driver, testPage.url);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
+      await checkJobs(driver, testPage.url);
     } finally {
       await testPage.close();
     }

@@ -2,24 +2,11 @@ import { formatSize, needsManifest, pickQuality, type MediaItem, type QualityOpt
 import type { Settings } from '../core/settings.ts';
 import { fileNameOfAddress } from '../core/url-names.ts';
 import type { DownloadAction } from './download-client.ts';
+import { createElement } from './dom.ts';
+import { createJobPanel } from './job-panel.ts';
+import type { JobsView } from './job-tracker.ts';
 
 const KIND_LABELS = { direct: 'Direct file', hls: 'HLS stream', dash: 'DASH stream' } as const;
-
-function createElement<K extends keyof HTMLElementTagNameMap>(
-  doc: Document,
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const element = doc.createElement(tag);
-  if (className) {
-    element.className = className;
-  }
-  if (text !== undefined) {
-    element.textContent = text;
-  }
-  return element;
-}
 
 function qualityLabel(option: QualityOption): string {
   if (option.sizeBytes === undefined) {
@@ -79,6 +66,7 @@ export function createDownloadRow(
   item: MediaItem,
   settings: Settings,
   download: DownloadAction,
+  jobs?: JobsView,
 ): HTMLElement {
   const row = createElement(doc, 'div', 'actions');
   const picker = createQualityPicker(doc, item, settings.defaultQuality);
@@ -86,27 +74,66 @@ export function createDownloadRow(
   button.type = 'button';
   const result = createElement(doc, 'p', 'result');
   result.setAttribute('role', 'status');
+  const wrapper = createElement(doc, 'div');
+  wrapper.append(row, result);
+  let panel: HTMLElement | undefined;
+
+  const showResult = (text: string, isError: boolean): void => {
+    result.textContent = text;
+    result.classList.toggle('error', isError);
+  };
+
+  /** Shows the progress of a stream job under the button, which waits until the job ends. */
+  const follow = (tracker: JobsView, jobId: string): void => {
+    panel?.remove();
+    showResult('', false);
+    button.disabled = true;
+
+    const requestCancel = async (): Promise<boolean> => {
+      const asked = await tracker.cancel(jobId);
+      if (!asked.ok) {
+        showResult(asked.error, true);
+      }
+      return asked.ok;
+    };
+    const jobPanel = createJobPanel(doc, requestCancel);
+    panel = jobPanel.element;
+    wrapper.append(panel);
+
+    tracker.watch(jobId, (state) => {
+      if (jobPanel.show(state)) {
+        button.disabled = false;
+      }
+    });
+  };
 
   button.addEventListener('click', () => {
     const option = item.qualities.find((candidate) => candidate.quality === picker.value);
     if (!option) {
-      result.textContent = 'Pick a quality first.';
+      showResult('Pick a quality first.', true);
       return;
     }
 
     // A second click while the browser is starting the download would start it twice.
     button.disabled = true;
-    result.textContent = '';
+    showResult('', false);
     void download(item, option).then((outcome) => {
-      result.textContent = outcome.ok ? outcome.value : outcome.error;
-      result.classList.toggle('error', !outcome.ok);
+      if (outcome.ok && outcome.value.jobId !== undefined && jobs !== undefined) {
+        follow(jobs, outcome.value.jobId);
+        return;
+      }
+      showResult(outcome.ok ? outcome.value.text : outcome.error, !outcome.ok);
       button.disabled = false;
     });
   });
 
   row.append(picker, button);
-  const wrapper = createElement(doc, 'div');
-  wrapper.append(row, result);
+
+  // The popup was closed while a job ran: pick it up again, so it can be watched and stopped.
+  const running = jobs?.runningFor(item.id);
+  if (jobs !== undefined && running !== undefined) {
+    follow(jobs, running.id);
+  }
   return wrapper;
 }
 
@@ -121,7 +148,7 @@ export function metaText(item: MediaItem): string {
   return details.join(' · ');
 }
 
-function createCard(doc: Document, item: MediaItem, settings: Settings, download: DownloadAction): HTMLElement {
+function createCard(doc: Document, item: MediaItem, settings: Settings, download: DownloadAction, jobs?: JobsView): HTMLElement {
   const card = createElement(doc, 'li', 'card');
   card.append(createElement(doc, 'h2', 'title', item.title), createElement(doc, 'p', 'meta', metaText(item)));
 
@@ -131,7 +158,7 @@ function createCard(doc: Document, item: MediaItem, settings: Settings, download
     return card;
   }
 
-  card.append(createDownloadRow(doc, item, settings, download));
+  card.append(createDownloadRow(doc, item, settings, download, jobs));
   return card;
 }
 
@@ -142,8 +169,9 @@ export function renderMediaList(
   items: readonly MediaItem[],
   settings: Settings,
   download: DownloadAction,
+  jobs?: JobsView,
 ): void {
   const doc = list.ownerDocument;
-  list.replaceChildren(...items.map((item) => createCard(doc, item, settings, download)));
+  list.replaceChildren(...items.map((item) => createCard(doc, item, settings, download, jobs)));
   emptyNotice.hidden = items.length > 0;
 }

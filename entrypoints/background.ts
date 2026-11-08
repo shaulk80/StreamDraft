@@ -1,5 +1,6 @@
 import {
   handleMessage,
+  parseCancelJobMessage,
   parseDownloadMediaMessage,
   parseFoundMediaMessage,
   parseResolveStreamsMessage,
@@ -89,6 +90,12 @@ export default defineBackground(() => {
     if (resolve.ok) {
       // Only the popup asks; it names the tab it is shown over.
       return resolver.resolveTab(resolve.value).then((count) => ok(count));
+    }
+
+    const cancel = parseCancelJobMessage(message);
+    if (cancel.ok) {
+      // The job ends with its own "cancelled" state, which the popup reads from storage.
+      return coordinator.cancel(cancel.value).then(() => ok(undefined));
     }
 
     const download = parseDownloadMediaMessage(message);

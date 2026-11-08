@@ -23,7 +23,8 @@ export interface JobState {
 
 /** The part of a `storage` area the store uses. */
 export interface JobAreaLike {
-  get(key: string): Promise<Record<string, unknown>>;
+  /** `null` reads the whole area. */
+  get(key: string | null): Promise<Record<string, unknown>>;
   set(items: Record<string, unknown>): Promise<void>;
   remove(key: string): Promise<void>;
 }
@@ -44,7 +45,15 @@ export function jobIdFromKey(key: string): string | undefined {
   return key.slice(KEY_PREFIX.length);
 }
 
-function isJobState(value: unknown): value is JobState {
+/** A running job not saved for this long is taken to be dead: the browser or the background was closed under it. */
+export const STALE_AFTER_MS = 10 * 60 * 1000;
+
+/** True for a running job whose state was not saved for a long time. Finished jobs are never stale. */
+export function isStale(state: JobState, now: number): boolean {
+  return state.status === 'running' && now - state.updatedAt > STALE_AFTER_MS;
+}
+
+export function isJobState(value: unknown): value is JobState {
   if (typeof value !== 'object' || value === null) {
     return false;
   }
@@ -84,6 +93,20 @@ export class JobStateStore {
     } catch (error) {
       console.error(`StreamDraft: could not read the state of job ${jobId}`, error);
       return undefined;
+    }
+  }
+
+  /** Every saved job state; damaged entries are left out. Never fails. */
+  async loadAll(): Promise<JobState[]> {
+    try {
+      const stored = await this.area.get(null);
+      return Object.entries(stored)
+        .filter(([key]) => jobIdFromKey(key) !== undefined)
+        .map(([, value]) => value)
+        .filter(isJobState);
+    } catch (error) {
+      console.error('StreamDraft: could not read the saved jobs', error);
+      return [];
     }
   }
 

@@ -1,11 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import {
+  cancelJobMessage,
   foundMediaMessage,
   handleMessage,
   MAX_CANDIDATES_PER_MESSAGE,
   parseShowTextMessage,
   showTextMessage,
   parseFoundMediaMessage,
+  parseCancelJobMessage,
   parseResolveStreamsMessage,
   resolveStreamsMessage,
   PING,
@@ -108,5 +110,21 @@ describe('parseResolveStreamsMessage', () => {
     ['a tab that is text', { type: 'resolve-streams', tabId: '7' }],
   ])('rejects %s', (_name, message) => {
     expect(parseResolveStreamsMessage(message).ok).toBe(false);
+  });
+});
+
+describe('parseCancelJobMessage', () => {
+  test('returns the job of a cancel-job message', () => {
+    expect(parseCancelJobMessage(cancelJobMessage('job-1'))).toEqual({ ok: true, value: 'job-1' });
+  });
+
+  test.each([
+    ['not an object', 'cancel-job'],
+    ['another type', { type: 'ping', jobId: 'job-1' }],
+    ['no job', { type: 'cancel-job' }],
+    ['an empty job', { type: 'cancel-job', jobId: '' }],
+    ['a job that is a number', { type: 'cancel-job', jobId: 4 }],
+  ])('rejects %s', (_name, message) => {
+    expect(parseCancelJobMessage(message).ok).toBe(false);
   });
 });
