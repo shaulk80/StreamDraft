@@ -30,6 +30,7 @@ pnpm run zip:firefox / zip:chrome     packages into .output/
 pnpm run smoke:chrome                 same for the Chrome package in headless Chrome (skipped when no Chrome is found; CHROME_BIN to choose one)
 pnpm run testpage                     serves the test pages on http://127.0.0.1:8123/ (/ overlay, /detect.html detection) for manual testing
 pnpm run smoke                        extracts the packages, loads the Firefox one in headless Firefox (FIREFOX_BIN to choose a binary)
+SMOKE_LARGE=1 pnpm run smoke[:chrome] adds the large file check: a 1.1 GB generated stream, browser memory measured (needs 3 GB of disk; not part of build.ps1)
 ```
 
 ## Rules

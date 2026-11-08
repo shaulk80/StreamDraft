@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { readFlatMp4 } from '../engine/flat-mp4-reader.ts';
+import { ffprobeProblem } from './ffprobe.ts';
 
 // What the stream download checks of both browsers share: the page, the names the files
 // are saved under, and a look inside the saved files.
@@ -11,6 +12,10 @@ export const STREAM_PAGE_TITLE = 'StreamDraft stream download test page';
 /** The DASH stream (a 360p picture and a sound) and the HLS stream (one playlist, no quality named) as saved. */
 export const DASH_FILE_NAME = `${STREAM_PAGE_TITLE} [360p].mp4`;
 export const HLS_FILE_NAME = `${STREAM_PAGE_TITLE} [original].mp4`;
+
+/** The streams ffprobe must find in a file with picture and sound, and in one with sound only. */
+const PICTURE_AND_SOUND = ['video', 'audio'];
+const SOUND_ONLY = ['audio'];
 
 /** The DASH file joins a picture of 4 samples and a sound of 4 samples. */
 export const DASH_TRACKS = [4, 4];
@@ -34,7 +39,11 @@ export function dashFileProblem(filePath: string): string | undefined {
   if (!saved.ok) {
     return `${DASH_FILE_NAME} is not a readable MP4: ${saved.error}`;
   }
-  return JSON.stringify(saved.samplesPerTrack) === JSON.stringify(DASH_TRACKS) ? undefined : `${DASH_FILE_NAME} has tracks of [${saved.samplesPerTrack.join(', ')}] samples, expected [${DASH_TRACKS.join(', ')}]`;
+  if (JSON.stringify(saved.samplesPerTrack) !== JSON.stringify(DASH_TRACKS)) {
+    return `${DASH_FILE_NAME} has tracks of [${saved.samplesPerTrack.join(', ')}] samples, expected [${DASH_TRACKS.join(', ')}]`;
+  }
+
+  return ffprobeProblem(filePath, PICTURE_AND_SOUND);
 }
 
 /** A problem text when the saved HLS file has no video and sound samples, otherwise undefined. */
@@ -43,7 +52,11 @@ export function hlsFileProblem(filePath: string): string | undefined {
   if (!saved.ok) {
     return `${HLS_FILE_NAME} is not a readable MP4: ${saved.error}`;
   }
-  return saved.samplesPerTrack.length > 0 && saved.samplesPerTrack.every((count) => count > 0) ? undefined : `${HLS_FILE_NAME} has tracks of [${saved.samplesPerTrack.join(', ')}] samples`;
+  if (saved.samplesPerTrack.length === 0 || saved.samplesPerTrack.some((count) => count === 0)) {
+    return `${HLS_FILE_NAME} has tracks of [${saved.samplesPerTrack.join(', ')}] samples`;
+  }
+
+  return ffprobeProblem(filePath, PICTURE_AND_SOUND);
 }
 
 /**
@@ -77,6 +90,11 @@ export function audioFilesProblem(folder: string, names: readonly string[]): str
     }
     if (content.samplesPerTrack.length !== 1 || (content.samplesPerTrack[0] ?? 0) === 0) {
       return `${name} has tracks of [${content.samplesPerTrack.join(', ')}] samples, expected one track with sound`;
+    }
+
+    const outside = ffprobeProblem(path.join(folder, name), SOUND_ONLY);
+    if (outside !== undefined) {
+      return `${name}: ${outside}`;
     }
   }
 
