@@ -5,7 +5,14 @@ import {
   parseResolveStreamsMessage,
   showTextMessage,
 } from '../src/core/messages.ts';
+import { createBrowserEngine } from '../src/engine/browser-engine.ts';
 import { DownloadService } from '../src/engine/download-service.ts';
+import { parseEngineSignalMessage } from '../src/engine/engine-messages.ts';
+import type { EngineEvent, EngineHost } from '../src/engine/engine-types.ts';
+import { DownloadHandoffs, JobCoordinator } from '../src/engine/job-coordinator.ts';
+import { JobStateStore } from '../src/engine/job-state.ts';
+import { LocalEngineHost } from '../src/engine/local-engine-host.ts';
+import { OffscreenEngineHost, type OffscreenApi } from '../src/engine/offscreen-engine-host.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
 import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
@@ -25,16 +32,49 @@ export default defineBackground(() => {
 
   const registry = new MediaRegistry(browser.storage.session);
   const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
+
+  // Streams are downloaded by the engine: in this page on Firefox, in an offscreen
+  // document on Chrome (decision 0003). Its news comes back as events.
+  const onEngineEvent = (event: EngineEvent): void => void coordinator.handleEvent(event);
+  const offscreenHost = import.meta.env.FIREFOX ? undefined : new OffscreenEngineHost(createOffscreenApi(), onEngineEvent);
+  const engineHost: EngineHost =
+    offscreenHost ??
+    new LocalEngineHost(
+      createBrowserEngine((signal) => {
+        if (signal.kind !== 'idle') {
+          onEngineEvent(signal);
+        }
+      }),
+    );
+  const coordinator = new JobCoordinator({
+    host: engineHost,
+    downloads: browser.downloads,
+    states: new JobStateStore(browser.storage.local),
+    handoffs: new DownloadHandoffs(browser.storage.session),
+    newJobId: () => crypto.randomUUID(),
+    now: () => Date.now(),
+  });
+
   const downloads = new DownloadService({
     downloads: browser.downloads,
     listItems: (tabId) => registry.list(tabId),
     loadSettings: () => store.load(),
     today: () => new Date().toISOString().slice(0, 10),
+    streams: coordinator,
   });
 
   // Listeners are registered right away (not after an await): the browser can
   // stop this script at any time and wakes it for exactly these events.
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
+    const signal = parseEngineSignalMessage(message);
+    if (signal.ok) {
+      // Only the engine's own document reports; a page's content script has a tab and is not believed.
+      if (sender.tab === undefined) {
+        void offscreenHost?.receive(signal.value);
+      }
+      return undefined;
+    }
+
     const found = parseFoundMediaMessage(message);
     if (found.ok) {
       // The sender is a page's content script; its tab is the one the videos belong to.
@@ -67,6 +107,9 @@ export default defineBackground(() => {
   });
 
   store.onChange((settings) => void menu.apply(settings));
+
+  // A finished stream is given to the browser's downloads; this says when the browser is done with it.
+  browser.downloads.onChanged.addListener((change) => void coordinator.handleDownloadChange(change));
 
   browser.contextMenus.onClicked.addListener((info, tab) => {
     if (info.menuItemId !== MENU_ITEM_ID || tab?.id === undefined) {
@@ -125,6 +168,21 @@ export default defineBackground(() => {
     } catch (error) {
       console.error('StreamDraft: the page did not answer the menu click', error);
     }
+  }
+
+  /** The Chrome calls that open, find and close the engine's offscreen document. */
+  function createOffscreenApi(): OffscreenApi {
+    return {
+      hasDocument: async () => (await browser.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length > 0,
+      createDocument: () =>
+        browser.offscreen.createDocument({
+          url: browser.runtime.getURL('/offscreen.html'),
+          reasons: ['BLOBS'],
+          justification: 'Joins the parts of a streamed video into one file and gives it to the browser to save.',
+        }),
+      closeDocument: () => browser.offscreen.closeDocument(),
+      send: (message) => browser.runtime.sendMessage(message),
+    };
   }
 
   registerDetection();

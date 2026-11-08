@@ -1,8 +1,9 @@
-import { downloadFilename, pickQuality, type MediaItem } from '../core/media.ts';
+import { downloadFilename, pickQuality, type MediaItem, type QualityOption } from '../core/media.ts';
 import type { DownloadMediaMessage } from '../core/messages.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import type { Quality, Settings } from '../core/settings.ts';
 import { addressWithoutFragment } from '../core/url-names.ts';
+import type { StreamStarter } from './job-coordinator.ts';
 
 /**
  * The part of `browser.downloads` the service uses. Resolves with the download's id.
@@ -20,6 +21,8 @@ export interface DownloadServiceDeps {
   loadSettings(): Promise<Settings>;
   /** Today as `YYYY-MM-DD`, for the {date} placeholder. */
   today(): string;
+  /** Downloads HLS and DASH videos; without it streams are refused. */
+  streams?: StreamStarter;
 }
 
 const NOT_LISTED = 'This video is no longer listed for the page. Reload the page and try again.';
@@ -27,13 +30,17 @@ const AMBIGUOUS = 'Could not tell which video this is. Use the StreamDraft butto
 
 export interface StartedDownload {
   filename: string;
-  downloadId: number;
+  /** A direct file is saved by the browser at once. */
+  downloadId?: number;
+  /** A stream is a job of the engine; the browser saves the file when the job is done. */
+  jobId?: string;
 }
 
 /**
- * Starts the browser's own download of a video found on a tab. Direct files
- * only (M2): the browser fetches the file itself, with the user's cookies, so
- * nothing passes through the extension.
+ * Starts the download of a video found on a tab. A direct file is fetched by
+ * the browser itself, with the user's cookies, so nothing passes through the
+ * extension; a stream (HLS, DASH) is a job of the engine, which fetches and
+ * joins its parts and hands the finished file to the browser.
  */
 export class DownloadService {
   constructor(private readonly deps: DownloadServiceDeps) {}
@@ -72,9 +79,6 @@ export class DownloadService {
     if (item.protected) {
       return fail('This video is protected by DRM and cannot be downloaded.');
     }
-    if (item.kind !== 'direct') {
-      return fail('Streamed videos cannot be downloaded yet.');
-    }
 
     const option =
       item.qualities.find((candidate) => candidate.quality === wanted) ??
@@ -84,7 +88,19 @@ export class DownloadService {
     }
 
     const filename = downloadFilename(item, option, settings.filenameTemplate, this.deps.today());
-    return this.begin(item.url, filename);
+    if (item.kind === 'direct') {
+      return this.begin(item.url, filename);
+    }
+    return this.beginStream(item, option, filename);
+  }
+
+  private async beginStream(item: MediaItem, option: QualityOption, filename: string): Promise<Result<StartedDownload>> {
+    if (this.deps.streams === undefined) {
+      return fail('Streamed videos cannot be downloaded yet.');
+    }
+
+    const started = await this.deps.streams.start({ item, option, filename });
+    return started.ok ? ok({ filename, jobId: started.value.jobId }) : started;
   }
 
   private async begin(url: string, filename: string): Promise<Result<StartedDownload>> {

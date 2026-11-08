@@ -2,6 +2,8 @@ import { describe, expect, test, vi } from 'vitest';
 import type { MediaItem } from '../../src/core/media.ts';
 import { DEFAULT_SETTINGS, type Settings } from '../../src/core/settings.ts';
 import { DownloadService, type DownloadsLike } from '../../src/engine/download-service.ts';
+import type { StreamRequest, StreamStarter } from '../../src/engine/job-coordinator.ts';
+import { fail, ok } from '../../src/core/result.ts';
 
 const DIRECT: MediaItem = {
   id: 'https://cdn.example.com/v/clip.mp4',
@@ -126,5 +128,69 @@ describe('DownloadService.startForAddress', () => {
     const result = await service.startForAddress(7, DIRECT.url);
 
     expect(result.ok && result.value.filename).toBe('480p.mp4');
+  });
+});
+
+describe('DownloadService with streams', () => {
+  const VARIANT = { variantId: 'https://cdn.example.com/v720.m3u8', height: 720 };
+  const STREAM: MediaItem = {
+    ...DIRECT,
+    id: 'https://cdn.example.com/master.m3u8',
+    url: 'https://cdn.example.com/master.m3u8',
+    kind: 'hls',
+    qualities: [
+      { quality: '720p', label: '720p', variant: VARIANT },
+      { quality: '360p', label: '360p', variant: { variantId: 'https://cdn.example.com/v360.m3u8', height: 360 } },
+    ],
+  };
+
+  function createStreamService(items: MediaItem[], started = ok({ jobId: 'job1' })) {
+    const start = vi.fn<(request: StreamRequest) => Promise<typeof started>>(() => Promise.resolve(started));
+    const streams: StreamStarter = { start };
+    const download = vi.fn<DownloadsLike['download']>(() => Promise.resolve(1));
+    const service = new DownloadService({
+      downloads: { download },
+      listItems: () => Promise.resolve(items),
+      loadSettings: () => Promise.resolve(DEFAULT_SETTINGS),
+      today: () => '2026-11-07',
+      streams,
+    });
+    return { service, start, download };
+  }
+
+  test('hands the chosen quality to the engine under the template name, without asking the browser to download', async () => {
+    const { service, start, download } = createStreamService([STREAM]);
+
+    const result = await service.start(7, { itemId: STREAM.id, quality: '720p' });
+
+    expect(result).toEqual({ ok: true, value: { filename: 'Holiday_ day 1 [720p].mp4', jobId: 'job1' } });
+    expect(start).toHaveBeenCalledWith({ item: STREAM, option: STREAM.qualities[0], filename: 'Holiday_ day 1 [720p].mp4' });
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  test('the sound-only quality is saved as m4a', async () => {
+    const audio = { quality: 'audio' as const, label: 'Audio only', variant: { ...VARIANT, audioOnly: true } };
+    const { service } = createStreamService([{ ...STREAM, qualities: [...STREAM.qualities, audio] }]);
+
+    const result = await service.start(7, { itemId: STREAM.id, quality: 'audio' });
+
+    expect(result.ok && result.value.filename).toBe('Holiday_ day 1 [audio].m4a');
+  });
+
+  test('a failure of the engine is reported as it is', async () => {
+    const { service } = createStreamService([STREAM], fail('The browser would not give space.'));
+
+    const result = await service.start(7, { itemId: STREAM.id, quality: '720p' });
+
+    expect(result).toEqual({ ok: false, error: 'The browser would not give space.' });
+  });
+
+  test('a protected stream never reaches the engine', async () => {
+    const { service, start } = createStreamService([{ ...STREAM, protected: true }]);
+
+    const result = await service.start(7, { itemId: STREAM.id, quality: '720p' });
+
+    expect(!result.ok && result.error).toContain('DRM');
+    expect(start).not.toHaveBeenCalled();
   });
 });
