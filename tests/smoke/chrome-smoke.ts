@@ -5,6 +5,7 @@ import path from 'node:path';
 import { startTestPageServer } from '../pages/server.ts';
 import { CdpConnection } from './cdp.ts';
 import { extract, packageDir, readVersion } from './package-files.ts';
+import { dashFileProblem, DASH_FILE_NAME, hlsFileProblem, HLS_FILE_NAME, STREAM_PAGE } from './stream-download.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
 //   1. unpack the zip and load it as an unpacked extension (Extensions.loadUnpacked);
@@ -162,6 +163,56 @@ async function checkStreams(browser: CdpConnection, extensionId: string, pageUrl
     return;
   }
   console.log('Chrome runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
+}
+
+// The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on
+// each card must fetch the parts, join them into one MP4 in the offscreen document and save it.
+async function checkStreamDownloads(browser: CdpConnection, port: number, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const offscreenOpen = async (): Promise<boolean> => (await listTargets(port)).some((target) => target.url === `chrome-extension://${extensionId}/offscreen.html`);
+  const page = await Page.open(browser, `${pageUrl}${STREAM_PAGE}`);
+  const fetched = await waitFor(async () =>
+    (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched')
+      ? true
+      : undefined,
+  );
+  if (!fetched) {
+    problems.push('chrome runtime: the stream download test page did not finish loading');
+    return;
+  }
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${STREAM_PAGE}*`);
+  const popup = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
+  const listed = await waitFor(async () =>
+    (await popup.evaluate<number>("document.querySelectorAll('#media-list .download').length")) === 2 ? true : undefined,
+  );
+  if (!listed) {
+    problems.push('chrome runtime: stream download: the popup did not list two streams with qualities');
+    return;
+  }
+
+  await popup.evaluate("(() => { for (const button of document.querySelectorAll('#media-list .download')) { button.click(); } })()");
+  const expected = [DASH_FILE_NAME, HLS_FILE_NAME];
+  let sawOffscreen = false;
+  const saved = await waitFor(async () => {
+    sawOffscreen ||= await offscreenOpen();
+    return expected.every((name) => existsSync(path.join(downloadDir, name))) ? true : undefined;
+  });
+  if (!saved) {
+    problems.push(`chrome runtime: stream download: expected [${expected.join(', ')}] in the download folder, found [${readdirSync(downloadDir).join(', ')}]`);
+    return;
+  }
+
+  const found = [dashFileProblem(path.join(downloadDir, DASH_FILE_NAME)), hlsFileProblem(path.join(downloadDir, HLS_FILE_NAME))].filter((problem) => problem !== undefined);
+  found.forEach((problem) => problems.push(`chrome runtime: stream download: ${problem}`));
+
+  // The browser has saved both files: the engine drops their temporary files and the offscreen document closes.
+  const closed = await waitFor(async () => ((await offscreenOpen()) ? undefined : true));
+  if (!closed) {
+    problems.push('chrome runtime: stream download: the offscreen document stayed open after both files were saved');
+  }
+  if (found.length === 0 && closed) {
+    console.log(`Chrome runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined in the offscreen document (seen open: ${String(sawOffscreen)}) and saved as readable MP4 files; the document closed afterwards`);
+  }
 }
 
 async function checkDetectionAndDownload(
@@ -336,6 +387,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
 
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
     await checkStreams(browser, extensionId, server.url);
+    await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkOverlay(browser, server.url, downloadDir);
   } catch (error) {
     console.error(error);

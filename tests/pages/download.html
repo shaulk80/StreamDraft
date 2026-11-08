@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft stream download test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft stream download test page</h1>
+    <p>
+      The popup should list two streams for this tab, a DASH one (360p and audio only) and an HLS one, and both
+      should download: the segments exist (a few kilobytes), they are joined into one MP4 each. They are built by
+      <code>tests/pages/generated-stream.ts</code> and do not play.
+    </p>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      async function load() {
+        await fetch('/gen/dash/manifest.mpd');
+        await fetch('/gen/hls/index.m3u8');
+      }
+      load()
+        .then(() => {
+          document.getElementById('fetch-status').textContent = 'fetched';
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>

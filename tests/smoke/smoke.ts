@@ -1,10 +1,11 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Builder, By, until } from 'selenium-webdriver';
 import * as firefox from 'selenium-webdriver/firefox.js';
 import { startTestPageServer } from '../pages/server.ts';
 import { extract, packageDir, readVersion } from './package-files.ts';
+import { dashFileProblem, DASH_FILE_NAME, hlsFileProblem, HLS_FILE_NAME, STREAM_PAGE } from './stream-download.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -270,6 +271,42 @@ async function checkStreams(driver: firefox.Driver, pageUrl: string): Promise<vo
   console.log('Firefox runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
 }
 
+// The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on
+// each card must fetch the parts, join them into one MP4 and save it: in the background page, with the
+// file handed to the browser as a Blob address.
+async function checkStreamDownloads(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${STREAM_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  const pattern = `http://127.0.0.1/${STREAM_PAGE}*`;
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${encodeURIComponent(pattern)}`);
+  try {
+    await driver.wait(async () => (await driver.findElements(By.css('#media-list .download'))).length === 2, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push('firefox runtime: stream download: the popup did not list two streams with qualities');
+    return;
+  }
+
+  await driver.executeScript("for (const button of document.querySelectorAll('#media-list .download')) { button.click(); }");
+  const expected = [DASH_FILE_NAME, HLS_FILE_NAME];
+  try {
+    await driver.wait(() => expected.every((name) => existsSync(path.join(downloadDir, name))), WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    const said = await driver.executeScript<string[]>("return [...document.querySelectorAll('#media-list .result')].map((result) => result.textContent);");
+    problems.push(`firefox runtime: stream download: expected [${expected.join(', ')}] in the download folder, found [${readdirSync(downloadDir).join(', ')}]; the popup said [${said.join(' | ')}]`);
+    return;
+  }
+
+  const found = [dashFileProblem(path.join(downloadDir, DASH_FILE_NAME)), hlsFileProblem(path.join(downloadDir, HLS_FILE_NAME))].filter((problem) => problem !== undefined);
+  found.forEach((problem) => problems.push(`firefox runtime: stream download: ${problem}`));
+  if (found.length === 0) {
+    console.log('Firefox runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined and saved as readable MP4 files');
+  }
+}
+
 // The Refresh button must reach the page's content script and get its answer: the note
 // says so and the list stays complete. (Emptying the saved list first, to see the page's files
 // come back, is done in the Chrome test: Firefox's test scripts cannot reach the extension API.)
@@ -505,6 +542,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkContextMenu(driver, testPage.url);
       await checkDetection(driver, testPage.url, downloadDir);
       await checkStreams(driver, testPage.url);
+      await checkStreamDownloads(driver, testPage.url, downloadDir);
     } finally {
       await testPage.close();
     }

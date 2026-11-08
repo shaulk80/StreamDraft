@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
+import { generatedStreamFiles } from './generated-stream.ts';
 
 // Serves the pages in tests/pages on 127.0.0.1, so the content script (which
 // matches web pages, not file:// ones) runs on them. Used by the smoke test, and
@@ -11,7 +12,11 @@ const PAGES: Readonly<Record<string, string>> = {
   '/': 'video.html',
   '/detect.html': 'detect.html',
   '/streams.html': 'streams.html',
+  '/download.html': 'download.html',
 };
+
+// Streams with real (tiny) segments, built once: the download tests fetch them.
+const GENERATED = generatedStreamFiles();
 
 // Small HLS playlists and a DASH manifest, read from tests/pages/streams. Their segments are not served.
 const MANIFESTS: Readonly<Record<string, { file: string; contentType: string }>> = {
@@ -108,6 +113,13 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
     return;
   }
 
+  const generated = GENERATED.get(pathname);
+  if (generated !== undefined) {
+    response.setHeader('Content-Type', generated.contentType);
+    response.end(generated.body);
+    return;
+  }
+
   const media = MEDIA[pathname];
   if (media !== undefined) {
     sendMedia(request, response, media);
@@ -136,5 +148,5 @@ export function startTestPageServer(port: number): Promise<TestPageServer> {
 
 if (import.meta.main) {
   const started = await startTestPageServer(8123);
-  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection) and ${started.url}streams.html (HLS and DASH)  (Ctrl+C to stop)`);
+  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download)  (Ctrl+C to stop)`);
 }
