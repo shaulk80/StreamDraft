@@ -3,6 +3,7 @@ import type {
   FileHandleLike,
   FileLike,
   WritableLike,
+  WriteChunk,
 } from '../../src/engine/opfs-store.ts';
 
 function notFound(name: string): DOMException {
@@ -11,22 +12,36 @@ function notFound(name: string): DOMException {
 
 class FakeFile implements FileHandleLike {
   content: Uint8Array<ArrayBuffer> = new Uint8Array(0);
-  /** When set, `createWritable().write` rejects with it and nothing is committed. */
+  /** When set, writes reject with it and nothing is committed. */
   failWith: Error | undefined;
 
   createWritable(): Promise<WritableLike> {
-    // Like the real thing: data is committed on close, so a failed write leaves the old content.
-    let pending: Uint8Array<ArrayBuffer> | undefined;
+    // Like the real thing: the data is staged and committed on close, so a failed or aborted write leaves the old content.
+    let staged: Uint8Array<ArrayBuffer> = new Uint8Array(0);
+    let cursor = 0;
     return Promise.resolve({
-      write: (data) => {
+      write: (chunk: WriteChunk) => {
         if (this.failWith) {
           return Promise.reject(this.failWith);
         }
-        pending = new Uint8Array(data);
+
+        const target = chunk instanceof Uint8Array ? { position: cursor, data: chunk } : chunk;
+        const end = target.position + target.data.length;
+        if (end > staged.length) {
+          const larger = new Uint8Array(end);
+          larger.set(staged);
+          staged = larger;
+        }
+        staged.set(target.data, target.position);
+        cursor = end;
         return Promise.resolve();
       },
       close: () => {
-        this.content = pending ?? this.content;
+        this.content = staged;
+        return Promise.resolve();
+      },
+      abort: () => {
+        staged = new Uint8Array(0);
         return Promise.resolve();
       },
     });

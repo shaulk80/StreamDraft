@@ -68,3 +68,5 @@ Disk cost: the pass writes a second copy of the file (the 2x already counted in 
 All three flat files play well in VLC and Windows Media Player. The owner added that with the fragmented files VLC was bad on all four (artifacts and freezes in every one, including the DASH merge that uses no mux.js), so the container was the cause, not mux.js and not the stream timestamps. Decision accepted: the flat MP4 is the output.
 
 Open for task 8: write the flat file once while muxing (sample tables built as segments arrive, payloads appended, `moov` written at the end and moved to the front) or keep the second pass and its extra disk copy. The recommendation is to build the tables while muxing.
+
+Resolved in task 8: [0006](0006-flat-mp4-written-once.md) writes the flat file once, with the sample tables built while muxing and the movie box last.

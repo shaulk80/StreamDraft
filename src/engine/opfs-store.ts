@@ -1,12 +1,18 @@
 import { fail, ok, type Result } from '../core/result.ts';
+import { OpfsOutputSink } from './opfs-sink.ts';
 import type { SegmentStore } from './segment-store.ts';
 
-/** The parts of the OPFS handles the store uses, so tests can stand in for the file system. */
+/** What `write` takes: bytes at the cursor, or bytes at a position (which moves the cursor there). */
+export type WriteChunk = Uint8Array | { type: 'write'; position: number; data: Uint8Array };
+
 export interface WritableLike {
-  write(data: Uint8Array<ArrayBuffer>): Promise<void>;
+  write(data: WriteChunk): Promise<void>;
   close(): Promise<void>;
+  /** Drops what was written without committing it. */
+  abort(): Promise<void>;
 }
 
+/** The parts of the OPFS handles the store uses, so tests can stand in for the file system. */
 export interface FileLike {
   size: number;
   arrayBuffer(): Promise<ArrayBuffer>;
@@ -61,7 +67,7 @@ export class OpfsSegmentStore implements SegmentStore {
     }
   }
 
-  async write(name: string, data: Uint8Array<ArrayBuffer>): Promise<Result<number>> {
+  async write(name: string, data: Uint8Array): Promise<Result<number>> {
     try {
       const handle = await this.folder.getFileHandle(name, { create: true });
       const writable = await handle.createWritable();
@@ -95,6 +101,11 @@ export class OpfsSegmentStore implements SegmentStore {
       }
       return undefined;
     }
+  }
+
+  /** The file the finished video is written to, in the job's folder (`clear` removes it with the segments). */
+  createOutput(name: string): Promise<Result<OpfsOutputSink>> {
+    return OpfsOutputSink.open(this.folder, name);
   }
 
   async clear(): Promise<Result<void>> {

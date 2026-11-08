@@ -4,3 +4,7 @@
 *.ico binary
 *.zip binary
 *.xpi binary
+*.mpegts binary
+*.mp4 binary
+*.m4a binary
+*.aac binary
