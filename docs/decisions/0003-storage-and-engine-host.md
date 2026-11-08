@@ -27,6 +27,12 @@ Same checks at 64 MiB passed too. Writing 1.5 GiB took 2 to 10 s. The growth is 
 - A stream is limited by disk and quota, not RAM. Muxing needs the segments and the output at the same time (about twice the file size), so about 5 GB of video fits in 10 GB. Check `navigator.storage.estimate()` before a job and say so in plain words when it will not fit (M6).
 - The muxer must read and write through streams or chunked reads (`File.slice`) rather than whole `ArrayBuffer`s, or the memory result above is lost. This is a requirement for the muxer spike (0004).
 
+## Found while building the host (task 9)
+
+- A Blob made from an OPFS file has no type, and Chrome then saved the download with a `.txt` extension whatever the file name said. The Blob URL is made from `file.slice(0, size, type)` (`video/mp4`, `audio/mp4` for sound only): still backed by the file on disk, but typed.
+- The offscreen document has only the `runtime` API, so it cannot save job progress: it reports to the background with messages, and the background keeps the state in `storage.local`. The background can be stopped meanwhile, so the answer of a job is a message too, not the reply of the start command.
+- The offscreen document tells the background when it holds no job; the background asks once more ("how many jobs?") before closing it, so a job started at that moment is not lost.
+
 ## Not verified
 
 - Firefox private windows: OPFS has historically been unavailable there. A job started from a private window needs a clear error; check by hand in M3's review.
