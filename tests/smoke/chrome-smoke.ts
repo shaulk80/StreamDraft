@@ -17,6 +17,7 @@ import {
   STREAM_PAGE,
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
+import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
 //   1. unpack the zip and load it as an unpacked extension (Extensions.loadUnpacked);
@@ -278,6 +279,37 @@ async function checkJobs(browser: CdpConnection, extensionId: string, pageUrl: s
   }
 }
 
+// Opt-in (SMOKE_LARGE=1): a stream of 1.1 GiB is downloaded while the memory of Chrome is sampled.
+async function checkLargeStream(browser: CdpConnection, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const page = await Page.open(browser, `${pageUrl}${LARGE_PAGE}`);
+  const fetched = await waitFor(async () =>
+    (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched') ? true : undefined,
+  );
+  if (!fetched) {
+    problems.push('chrome runtime: the large stream test page did not finish loading');
+    return;
+  }
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${LARGE_PAGE}*`);
+  const popupPage = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
+  const listed = await waitFor(async () => ((await popupPage.evaluate<number>("document.querySelectorAll('#media-list .download').length")) === 1 ? true : undefined));
+  if (!listed) {
+    problems.push('chrome runtime: large stream: the popup did not list the stream with qualities');
+    return;
+  }
+
+  const popup: PopupPage = {
+    act: async (statements) => {
+      await popupPage.evaluate(`(() => { ${statements} })()`);
+    },
+    read: (expression) => popupPage.evaluate<string>(expression),
+    reload: async () => undefined,
+  };
+  const storageUsage = (): Promise<number | undefined> => popupPage.evaluate<number>('navigator.storage.estimate().then((estimate) => estimate.usage)');
+  const found = await checkLargeDownload('Chrome', popup, path.join(downloadDir, LARGE_FILE_NAME), storageUsage);
+  found.forEach((problem) => problems.push(`chrome runtime: large stream: ${problem}`));
+}
+
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
 // stream carries its sound inside the video segments and the engine takes it out.
 async function checkSoundDownloads(popup: Page, offscreenOpen: () => Promise<boolean>, downloadDir: string): Promise<void> {
@@ -478,6 +510,9 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkStreams(browser, extensionId, server.url);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);
+    if (largeCheckEnabled()) {
+      await checkLargeStream(browser, extensionId, server.url, downloadDir);
+    }
     await checkOverlay(browser, server.url, downloadDir);
   } catch (error) {
     console.error(error);

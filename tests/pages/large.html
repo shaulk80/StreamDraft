@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft large stream test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft large stream test page</h1>
+    <p>
+      The popup should list one DASH stream (720p and audio only) of about 1.1 GB: 68 parts of 16 MB, built by the
+      test server when they are asked for (<code>tests/pages/large-stream.ts</code>). Download joins them into one MP4
+      without the browser's memory growing with the file. It needs about 3 GB of free disk space for a minute or two.
+      It does not play.
+    </p>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      fetch('/gen/large/manifest.mpd')
+        .then(() => {
+          document.getElementById('fetch-status').textContent = 'fetched';
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>

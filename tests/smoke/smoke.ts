@@ -17,6 +17,7 @@ import {
   STREAM_PAGE,
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
+import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -369,6 +370,35 @@ async function checkJobs(driver: firefox.Driver, pageUrl: string): Promise<void>
   }
 }
 
+// Opt-in (SMOKE_LARGE=1): a stream of 1.1 GiB is downloaded while the memory of Firefox is sampled.
+async function checkLargeStream(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${LARGE_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${LARGE_PAGE}*`);
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${pattern}`);
+  try {
+    await driver.wait(async () => (await driver.findElements(By.css('#media-list .download'))).length === 1, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push('firefox runtime: large stream: the popup did not list the stream with qualities');
+    return;
+  }
+
+  const popup: PopupPage = {
+    act: async (statements) => {
+      await driver.executeScript(statements);
+    },
+    read: (expression) => driver.executeScript<string | undefined>(`return ${expression};`),
+    reload: async () => undefined,
+  };
+  const storageUsage = (): Promise<number | undefined> =>
+    driver.executeAsyncScript<number | undefined>('const done = arguments[arguments.length - 1]; navigator.storage.estimate().then((estimate) => done(estimate.usage), () => done(undefined));');
+  const found = await checkLargeDownload('Firefox', popup, path.join(downloadDir, LARGE_FILE_NAME), storageUsage);
+  found.forEach((problem) => problems.push(`firefox runtime: large stream: ${problem}`));
+}
+
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
 // stream carries its sound inside the video segments and the engine takes it out.
 async function checkSoundDownloads(driver: firefox.Driver, downloadDir: string): Promise<void> {
@@ -629,6 +659,9 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkStreams(driver, testPage.url);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);
+      if (largeCheckEnabled()) {
+        await checkLargeStream(driver, testPage.url, downloadDir);
+      }
     } finally {
       await testPage.close();
     }
