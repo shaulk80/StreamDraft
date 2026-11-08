@@ -184,3 +184,26 @@ export function parseResolveStreamsMessage(message: unknown): Result<number> {
   }
   return ok(tabId);
 }
+
+/** Message the popup sends to the background to stop a stream job that is still fetching. */
+export const CANCEL_JOB = 'cancel-job';
+
+export function cancelJobMessage(jobId: string): { type: typeof CANCEL_JOB; jobId: string } {
+  return { type: CANCEL_JOB, jobId };
+}
+
+/** Returns the job to cancel, or an error when `message` is not a valid cancel-job message. */
+export function parseCancelJobMessage(message: unknown): Result<string> {
+  if (typeof message !== 'object' || message === null) {
+    return fail('Message must be an object.');
+  }
+
+  const { type, jobId } = message as Record<string, unknown>;
+  if (type !== CANCEL_JOB) {
+    return fail('Not a cancel-job message.');
+  }
+  if (typeof jobId !== 'string' || jobId === '') {
+    return fail('The cancel-job message names no job.');
+  }
+  return ok(jobId);
+}

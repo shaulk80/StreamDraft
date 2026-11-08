@@ -4,6 +4,8 @@ import {
   JobStateStore,
   jobIdFromKey,
   jobKey,
+  isStale,
+  STALE_AFTER_MS,
   type JobAreaLike,
   type JobState,
 } from '../../src/engine/job-state.ts';
@@ -16,9 +18,12 @@ class MemoryArea implements JobAreaLike {
   data: Record<string, unknown> = {};
   failing = false;
 
-  get(key: string): Promise<Record<string, unknown>> {
+  get(key: string | null): Promise<Record<string, unknown>> {
     if (this.failing) {
       return Promise.reject(new Error('storage unavailable'));
+    }
+    if (key === null) {
+      return Promise.resolve(structuredClone(this.data));
     }
     return Promise.resolve(key in this.data ? { [key]: structuredClone(this.data[key]) } : {});
   }
@@ -169,5 +174,46 @@ describe('JobProgressReporter', () => {
     await reporter.finish('cancelled', PROGRESS);
 
     expect(await store.load('job-1')).toMatchObject({ status: 'cancelled' });
+  });
+});
+
+describe('JobStateStore.loadAll', () => {
+  const running: JobState = { ...IDENTITY, ...PROGRESS, status: 'running', updatedAt: 5 };
+  const done: JobState = { ...running, id: 'job-2', status: 'done' };
+
+  test('gives every saved job and leaves out other keys and damaged entries', async () => {
+    const area = new MemoryArea();
+    area.data = {
+      [jobKey('job-1')]: running,
+      [jobKey('job-2')]: done,
+      [jobKey('job-3')]: 'damaged',
+      settings: { quality: 'best' },
+    };
+
+    const all = await new JobStateStore(area).loadAll();
+
+    expect(all.map((state) => state.id).sort()).toEqual(['job-1', 'job-2']);
+  });
+
+  test('gives nothing, and logs, when the storage cannot be read', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const area = new MemoryArea();
+    area.failing = true;
+
+    expect(await new JobStateStore(area).loadAll()).toEqual([]);
+    expect(logged).toHaveBeenCalled();
+  });
+});
+
+describe('isStale', () => {
+  const base: JobState = { ...IDENTITY, ...PROGRESS, status: 'running', updatedAt: 1000 };
+
+  test.each<[string, JobState['status'], number, boolean]>([
+    ['a running job saved a moment ago', 'running', 1000 + 1000, false],
+    ['a running job saved exactly at the limit', 'running', 1000 + STALE_AFTER_MS, false],
+    ['a running job not saved for a long time', 'running', 1000 + STALE_AFTER_MS + 1, true],
+    ['a finished job, however old', 'done', 1000 + STALE_AFTER_MS * 10, false],
+  ])('%s', (_name, status, now, expected) => {
+    expect(isStale({ ...base, status }, now)).toBe(expected);
   });
 });
