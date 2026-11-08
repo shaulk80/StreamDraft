@@ -283,6 +283,15 @@ async function checkStreams(driver: firefox.Driver, pageUrl: string): Promise<vo
   console.log('Firefox runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
 }
 
+/** The open popup, for reading the text of its cards (nothing to press, nothing to reload). */
+function popupPage(driver: firefox.Driver): PopupPage {
+  return {
+    act: async () => undefined,
+    read: (expression) => driver.executeScript<string | undefined>('return ' + expression + ';'),
+    reload: async () => undefined,
+  };
+}
+
 // The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on
 // each card must fetch the parts, join them into one MP4 and save it: in the background page, with the
 // file handed to the browser as a Blob address.
@@ -312,22 +321,17 @@ async function checkStreamDownloads(driver: firefox.Driver, pageUrl: string, dow
     return;
   }
 
+  // The name is in the folder while Firefox is still writing the file (the movie box comes last): the
+  // files are read once the cards say they are saved.
+  const unsaved = await savedTextProblem(popupPage(driver), expected.length);
+  if (unsaved !== undefined) {
+    problems.push('firefox runtime: stream download: ' + unsaved);
+  }
+
   const found = [dashFileProblem(path.join(downloadDir, DASH_FILE_NAME)), hlsFileProblem(path.join(downloadDir, HLS_FILE_NAME))].filter((problem) => problem !== undefined);
   found.forEach((problem) => problems.push(`firefox runtime: stream download: ${problem}`));
   if (found.length === 0) {
     console.log('Firefox runtime: stream download: the DASH stream (picture and sound) and the HLS stream were fetched, joined and saved as readable MP4 files');
-  }
-
-  const unsaved = await savedTextProblem(
-    {
-      act: async () => undefined,
-      read: (expression) => driver.executeScript<string | undefined>('return ' + expression + ';'),
-      reload: async () => undefined,
-    },
-    expected.length,
-  );
-  if (unsaved !== undefined) {
-    problems.push('firefox runtime: stream download: ' + unsaved);
   }
 
   await checkSoundDownloads(driver, downloadDir);
@@ -412,6 +416,13 @@ async function checkSoundDownloads(driver: firefox.Driver, downloadDir: string):
       problems.push(`firefox runtime: audio only: card ${card + 1} of ${AUDIO_FILE_COUNT}: no .m4a file arrived in the download folder, found [${readdirSync(downloadDir).join(', ')}]; the popup said [${said.join(' | ')}]`);
       return;
     }
+  }
+
+  // Both cards must have finished before the files are read: the name shows up while the file is written.
+  const unsaved = await savedTextProblem(popupPage(driver), AUDIO_FILE_COUNT);
+  if (unsaved !== undefined) {
+    problems.push('firefox runtime: audio only: ' + unsaved);
+    return;
   }
 
   const problem = audioFilesProblem(downloadDir, audioFileNames(readdirSync(downloadDir)));
