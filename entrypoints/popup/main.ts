@@ -4,7 +4,9 @@ import { PING, rescanMediaMessage, resolveStreamsMessage, type PongPayload } fro
 import type { Result } from '../../src/core/result.ts';
 import type { Settings } from '../../src/core/settings.ts';
 import { MediaRegistry, registryKey } from '../../src/detect/registry.ts';
-import { backgroundDownloadAction, demoDownloadAction, type DownloadAction } from '../../src/ui/download-client.ts';
+import { backgroundCancelAction, backgroundDownloadAction, demoDownloadAction, type DownloadAction } from '../../src/ui/download-client.ts';
+import { StorageJobSource } from '../../src/ui/job-source.ts';
+import { JobTracker } from '../../src/ui/job-tracker.ts';
 import { listSignature, renderMediaList } from '../../src/ui/media-view.ts';
 import { refreshVideos } from '../../src/ui/refresh.ts';
 import { SettingsStore } from '../../src/ui/settings-store.ts';
@@ -63,7 +65,11 @@ async function showTabVideos(
     renderMediaList(list, emptyNotice, [], settings, noDownload);
     return;
   }
-  const download = backgroundDownloadAction((message) => browser.runtime.sendMessage(message), tabId);
+  const send = (message: unknown): Promise<unknown> => browser.runtime.sendMessage(message);
+  const download = backgroundDownloadAction(send, tabId);
+  // Stream jobs run in the background and save their state; the popup follows it and can stop a job.
+  const jobs = new JobTracker(new StorageJobSource(browser.storage), backgroundCancelAction(send), () => Date.now());
+  await jobs.start();
 
   const registry = new MediaRegistry(browser.storage.session);
   let shown: string | undefined;
@@ -74,7 +80,7 @@ async function showTabVideos(
     const signature = listSignature(items);
     if (force || signature !== shown) {
       shown = signature;
-      renderMediaList(list, emptyNotice, items, settings, download);
+      renderMediaList(list, emptyNotice, items, settings, download, jobs);
     }
     return items.length;
   };
