@@ -49,16 +49,22 @@ The media files are filler bytes with the right content type. They do not play (
 
 Downloads go to your normal download folder. The browser never overwrites: a second download of the same name gets `(1)`.
 
-## 4. M2 checklist: detection and downloads
+## 4. What to test
 
-Do each in Firefox, then in Chrome.
+Two checklists follow, one per milestone: **5. M2** (finding videos and downloading plain files) and **6. M3** (HLS, DASH, audio only, progress, large files). Do each in Firefox, then in Chrome.
+
+- **M3: all of it.** It is new and the part nobody has seen yet. The last group, "Real streams", is the only way to learn whether the saved files play in a real player; the generated test pages make valid but made-up files.
+- **M2: only the lines marked (quick)**, about 10 minutes. M2 was checked by hand in both browsers when it was merged and the smoke tests cover its main paths again on every build (section 8). M3 changed the popup, the background script and the detection code that M2 uses, so the quick lines are a check that nothing broke, with the emphasis on what no test can see: how the popup looks with five cards, the badge, the settings dialog of the browser, and the right-click entry in Chrome. Do the rest of M2 only if a quick line looks wrong.
+- **M1 sample screens**: only if you want to look at the popup states without a test page (see the end of section 5).
+
+## 5. M2 checklist: detection and downloads
 
 **Detection page** (`/detect.html`):
-- [ ] The toolbar badge counts up to 5 within about 2 seconds (the last file is added by the page after 1 second).
-- [ ] The popup lists 5 cards: `clip.webm`, `direct.mp4`, `hidden-stream`, `late.mp4`, `song.mp3`. Every card is titled "StreamDraft detection test page" (none named after the address). Each card has the line `127.0.0.1 · Direct file · <file name>`, a quality list with one entry (e.g. "MP4 (300 KB)"), a Download button. With 5 cards the list scrolls inside the popup (a scrollbar next to the cards); the popup itself has no scrollbar, and no horizontal one.
+- [ ] (quick) The toolbar badge counts up to 5 within about 2 seconds (the last file is added by the page after 1 second).
+- [ ] (quick) The popup lists 5 cards: `clip.webm`, `direct.mp4`, `hidden-stream`, `late.mp4`, `song.mp3`. Every card is titled "StreamDraft detection test page" (none named after the address). Each card has the line `127.0.0.1 · Direct file · <file name>`, a quality list with one entry (e.g. "MP4 (300 KB)"), a Download button. With 5 cards the list scrolls inside the popup (a scrollbar next to the cards); the popup itself has no scrollbar, and no horizontal one.
 - [ ] `tiny.mp4` is not listed (the page fetches it, but it is too small).
 - [ ] `hidden-stream` is listed although it is not in the page (only the network observer sees it).
-- [ ] Download on `direct.mp4`: the card says `Saving as "StreamDraft detection test page [original].mp4".` and the file appears in the download folder with 300 KB. Try one more card; `hidden-stream` saves as `... [original].mp4`.
+- [ ] (quick) Download on `direct.mp4`: the card says `Saving as "StreamDraft detection test page [original].mp4".` and the file appears in the download folder with 300 KB. Try one more card; `hidden-stream` saves as `... [original].mp4`.
 - [ ] Reload the page: the list and the badge reset and fill again.
 - [ ] "Refresh" button (top of the popup, next to Settings): click it. A line appears under the title: "Checked the page again. N videos listed." and the list is redrawn (quality choices and result lines reset). It does not find a file the network observer missed earlier (that traffic is gone), but it re-reports everything the page itself contains. If you ever see a missing video again, note what the page was doing (just loaded, scrolled, a video added by script) and whether Refresh brought it back.
 - [ ] Refresh on a page the extension cannot reach (for example a tab opened before you loaded the extension, or `about:debugging`): the line says it could not check the page and shows the saved list.
@@ -69,8 +75,8 @@ Do each in Firefox, then in Chrome.
 **Overlay page** (`/`):
 - [ ] The video without a file at the top has no button. The tiny 80 x 45 video has no button. The three normal videos have a "Download" button in the top-right corner, including the one added after 1.5 seconds.
 - [ ] Scroll down: the button of the far-down video follows it, and buttons of videos scrolled out of view disappear.
-- [ ] Click the button, then Download in the small panel: it says `Saving as "StreamDraft test page [original].mp4".` (or the song/late name for the others) and the file is saved.
-- [ ] Right-click a video: the menu has "Download video with StreamDraft". Choosing it shows a toast and saves the file. The toast is a small dark box at the bottom right of the page with the same `Saving as ...` text; it stays 5 seconds and disappears. If the browser's "ask where to save" dialog is on, the toast may only appear after you close the dialog, so turn that setting off for this check.
+- [ ] (quick) Click the button, then Download in the small panel: it says `Saving as "StreamDraft test page [original].mp4".` (or the song/late name for the others) and the file is saved.
+- [ ] (quick) Right-click a video: the menu has "Download video with StreamDraft". Choosing it shows a toast and saves the file. The toast is a small dark box at the bottom right of the page with the same `Saving as ...` text; it stays 5 seconds and disappears. If the browser's "ask where to save" dialog is on, the toast may only appear after you close the dialog, so turn that setting off for this check.
 - [ ] Right-click a video that has no file (the one at the top): the entry may show; choosing it says it could not tell which video this is, or downloads the only video; it must not download a wrong file.
 
 **Options** (toolbar button, Settings):
@@ -79,8 +85,12 @@ Do each in Firefox, then in Chrome.
 - [ ] File name: change it to `{site} {date}`; the line "Example: ..." under the File name field updates as you type, showing the name a sample video would get (for `{site} {date}` something like `example.com 2026-11-08.mp4`); the next download is named like `127.0.0.1 2026-11-08.mp4`.
 - [ ] A bad template such as `{nope}` shows an error and is not saved; the old one keeps working.
 - [ ] Default quality: plain files have one quality, so nothing changes for them; check that picking another one does not break a download.
-- [ ] Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
+- [ ] (quick) Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
 - [ ] Settings survive closing and reopening the browser (not the temporary Firefox add-on: it is removed on exit).
+
+**Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
+
+## 6. M3 checklist: streams, audio only, progress and large files
 
 **Streams page** (`/streams.html`, M3):
 - [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
@@ -94,7 +104,7 @@ Do each in Firefox, then in Chrome.
 - [ ] Chrome only: the engine runs in an offscreen document that exists only while a download runs (the smoke test sees it open and then closed; whether `chrome://extensions` lists it under Inspect views is not checked).
 - [ ] Pick "Audio only" on the DASH card and press Download: the file `... [audio].m4a` is saved (a sound track of 4 samples, a few KB). On the HLS card the sound is cut out of the video segments: `... [audio].m4a` again, named with `(1)` after the first. (Made-up bytes: the files have valid structure but do not play.)
 - [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads one after the other: two downloads of one name started in the same instant sometimes make Firefox interrupt one of them (seen in the smoke test); the card then says "Could not save the video. The browser could not save the finished video."
-- [ ] Real streams, audio only: on a public page with a plain HLS or DASH video, pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. A video without a sound track should end with "Could not save the video. This video has no sound to save."
+
 **Job display page** (`/jobs.html`, M3 task 11): the popup lists two HLS streams of the same title; the first has 40 parts of 0.4 seconds each, in the second the second part is missing.
 - [ ] Download on the first card: the button is disabled, a progress bar fills and the line says "Downloading: 12% (...)" with a growing size; a Cancel button sits next to it.
 - [ ] While it runs, close the popup and open it again: the card shows the running job again (bar, text, Cancel), and the Download button is disabled.
@@ -103,7 +113,6 @@ Do each in Firefox, then in Chrome.
 - [ ] Let the first card run to the end (about 5 seconds): the bar fills, "Joining the parts and saving..." (no Cancel), then "Saved to your downloads folder."
 - [ ] A job whose background was killed (close the browser during a download, start it again, open the popup): the card does not show a stale job forever; after 10 minutes without news it is forgotten.
 - [ ] Firefox private window: Download says the browser would not give the extension space (OPFS is not available there). Not verified yet.
-- [ ] Real streams: on a public page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
 
 **Large stream page** (`/large.html`, M3 task 13): one DASH stream, 720p and Audio only, of 68 parts of 16 MB. Needs about 3 GB of free disk space for a minute or two, and a task manager open next to the browser. (`SMOKE_LARGE=1` runs the same download in the smoke tests and measures the memory for you; this is the by-hand version.)
 - [ ] Download the 720p card: the bar fills in a minute or less and the card ends with "Saved to your downloads folder."; `StreamDraft large stream test page [720p].mp4` is about 1.1 GB. (Made-up bytes: it does not play.)
@@ -111,9 +120,12 @@ Do each in Firefox, then in Chrome.
 - [ ] Afterwards the temporary files are gone: in Firefox `about:preferences#privacy` > Cookies and Site Data, or in Chrome the site data of the extension, shows nothing large. (The smoke test reads the storage use of the extension after the job: 0 MB.)
 - [ ] Press Cancel half way: "Cancelled.", the memory falls back, and the disk space is given back.
 
-**Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
+**Real streams** (any public page; the made-up test pages cannot show this):
+- [ ] On a page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
+- [ ] Audio only: on the same kind of page, pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. A video without a sound track should end with "Could not save the video. This video has no sound to save."
+- [ ] A stream protected by DRM (a commercial streaming site) is listed as protected, with the reason, and nothing is saved.
 
-## 5. Known gaps (do not report again)
+## 7. Known gaps (do not report again)
 
 - The in-page button appears only for a video whose own address is a recognisable media file. A `blob:` stream or an address without extension and type gets no button; the popup still lists what the network observer saw.
 - No button or toast for videos inside iframes; no button in fullscreen.
@@ -126,7 +138,7 @@ Do each in Firefox, then in Chrome.
 - The extension asks for access to all sites (detection needs it; see `docs/decisions/0002-detection-permissions.md`).
 - The right-click entry has not been run in Chrome by the automated tests (headless Chrome cannot operate the menu): check it by hand there.
 
-## 6. What the automated tests already cover
+## 8. What the automated tests already cover
 
 So you can skip it, or look only at how it feels:
 
