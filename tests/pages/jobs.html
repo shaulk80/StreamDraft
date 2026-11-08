@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft job display test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft job display test page</h1>
+    <p>
+      The popup should list two HLS streams. The first is slow (40 parts of 0.4 seconds): the Download button shows
+      a progress bar and a Cancel button, and closing and opening the popup shows the job again. The second is broken
+      (its second part is missing): Download ends with "Could not save the video." and the server's answer. They are
+      built by <code>tests/pages/generated-stream.ts</code>.
+    </p>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      async function load() {
+        await fetch('/gen/slow/index.m3u8');
+        await fetch('/gen/broken/index.m3u8');
+      }
+      load()
+        .then(() => {
+          document.getElementById('fetch-status').textContent = 'fetched';
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>
