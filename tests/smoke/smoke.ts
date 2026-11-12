@@ -18,6 +18,7 @@ import {
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
+import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
@@ -469,6 +470,38 @@ async function checkSoundDownloads(driver: firefox.Driver, downloadDir: string):
   problems.push(`firefox runtime: audio only: ${problem}`);
 }
 
+// A stream with a picture and no sound track: "Audio only" must end with the words for it, and nothing
+// is saved.
+async function checkSilentStream(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${SILENT_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${encodeURIComponent(`http://127.0.0.1/${SILENT_PAGE}*`)}`);
+  try {
+    await driver.wait(async () => (await driver.findElements(By.css('#media-list .download'))).length === 1, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push('firefox runtime: silent stream: the popup did not list the stream with qualities');
+    return;
+  }
+
+  const popup: PopupPage = {
+    act: async (statements) => {
+      await driver.executeScript(statements);
+    },
+    read: (expression) => driver.executeScript<string | undefined>(`return ${expression};`),
+    reload: async () => undefined,
+  };
+  const problem = await silentStreamProblem(popup);
+  const saved = readdirSync(downloadDir).filter(isSilentStreamFile);
+  if (problem !== undefined || saved.length > 0) {
+    problems.push(`firefox runtime: silent stream: ${problem ?? ''} saved files: [${saved.join(', ')}]`);
+    return;
+  }
+  console.log('Firefox runtime: silent stream: "Audio only" on a video without a sound track ended with "This video has no sound to save." and saved nothing');
+}
+
 // The Refresh button must reach the page's content script and get its answer: the note
 // says so and the list stays complete. (Emptying the saved list first, to see the page's files
 // come back, is done in the Chrome test: Firefox's test scripts cannot reach the extension API.)
@@ -706,6 +739,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkStreams(driver, testPage.url);
       await checkStreamParts(driver, testPage.url);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
+      await checkSilentStream(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);
       if (largeCheckEnabled()) {
         await checkLargeStream(driver, testPage.url, downloadDir);

@@ -61,7 +61,7 @@ async function readCard(popup: PopupPage, card: number): Promise<JobCardView | u
   return (JSON.parse(json) as JobCardView | null) ?? undefined;
 }
 
-async function waitForCard(popup: PopupPage, card: number, accept: (view: JobCardView) => boolean): Promise<JobCardView | undefined> {
+export async function waitForCard(popup: PopupPage, card: number, accept: (view: JobCardView) => boolean): Promise<JobCardView | undefined> {
   const deadline = Date.now() + JOB_WAIT_MS;
   while (Date.now() < deadline) {
     const view = await readCard(popup, card);

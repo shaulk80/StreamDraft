@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft silent stream test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft silent stream test page</h1>
+    <p>
+      The popup should list one DASH stream with a 360p quality and "Audio only". The stream has a picture and no
+      sound track at all: Download on 360p saves a file, Download on "Audio only" ends with "Could not save the
+      video. This video has no sound to save." and saves nothing. Built by
+      <code>tests/pages/generated-stream.ts</code>; it does not play.
+    </p>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      fetch('/gen/silent/manifest.mpd')
+        .then(() => {
+          document.getElementById('fetch-status').textContent = 'fetched';
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>
