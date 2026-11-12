@@ -54,8 +54,8 @@ Downloads go to your normal download folder. The browser never overwrites: a sec
 
 Two checklists follow, one per milestone: **5. M2** (finding videos and downloading plain files) and **6. M3** (HLS, DASH, audio only, progress, large files). Do each in Firefox, then in Chrome.
 
-- **M3: all of it.** It is new and the part nobody has seen yet. The last group, "Real streams", is the only way to learn whether the saved files play in a real player; the generated test pages make valid but made-up files.
-- **M2: only the lines marked (quick)**, about 10 minutes. M2 was checked by hand in both browsers when it was merged and the smoke tests cover its main paths again on every build (section 8). M3 changed the popup, the background script and the detection code that M2 uses, so the quick lines are a check that nothing broke, with the emphasis on what no test can see: how the popup looks with five cards, the badge, the settings dialog of the browser, and the right-click entry in Chrome. Do the rest of M2 only if a quick line looks wrong.
+- **M3: all of it** (done on 2026-11-12, see the results table in section 6; repeat it for a release). The last group, "Real streams", is the only way to learn whether the saved files play in a real player; the generated test pages make valid but made-up files.
+- **M2: done.** The owner went through the whole M2 checklist by hand in Firefox and Chrome when M2 was merged (PR #3), and the smoke tests cover its main paths on every build (section 8). The lines marked (quick) are the ones to repeat after a change to the popup, the background script or detection (about 10 minutes); do the rest of M2 only if one of them looks wrong.
 - **M1 sample screens**: only if you want to look at the popup states without a test page (see the end of section 5).
 
 ## 5. M2 checklist: detection and downloads
@@ -93,7 +93,25 @@ Two checklists follow, one per milestone: **5. M2** (finding videos and download
 
 ## 6. M3 checklist: streams, audio only, progress and large files
 
-Owner's run of 2026-11-12 (Firefox): everything passed except the badge line below (open bug), the private window line (it works, see there) and the lines that told the owner too little about how to check (rewritten below). The "Real streams" group is not done yet.
+### Results of the owner's run, 2026-11-12
+
+Done by hand in Firefox and in Chrome, with the same results in both. The lines below the table keep their `[ ]`: they are the checklist for the next run.
+
+| Group | Result | Notes |
+|---|---|---|
+| Streams page (`/streams.html`) | Passed | The badge showed 3 instead of 2 until the popup opened: fixed (PR #17), the owner re-checked. |
+| Stream download page (`/download.html`) | Passed | The Firefox interruption of two same-name downloads did not appear. |
+| Job display page (`/jobs.html`) | Passed | Private window in Firefox: works (the background page is not a private page). |
+| Large stream page (`/large.html`) | Passed | Memory stayed flat; the storage check shows no leftover files; Cancel gave the space back. |
+| Real streams: plain HLS and DASH, audio only | Passed | Saved files play in Firefox, Windows Media Player and VLC. |
+| Real streams: protected (Shaka demo) | Passed after the fix | Found 50 segment cards (PR #17); one card marked protected now. |
+| Chrome's offscreen document | Passed | Checked by hand (Chrome only). |
+| Stream parts page (`/parts.html`) | Passed | Added after the Shaka run; also in both smoke tests. |
+
+M2 was checked completely when it was merged (PR #3), so nothing of it is open.
+
+**Still open:**
+- A video with no sound track ("This video has no sound to save."): no public example is known; covered by unit tests only.
 
 **Streams page** (`/streams.html`, M3):
 - [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
