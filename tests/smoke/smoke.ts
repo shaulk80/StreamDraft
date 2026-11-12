@@ -18,6 +18,7 @@ import {
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
+import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -281,6 +282,41 @@ async function checkStreams(driver: firefox.Driver, pageUrl: string): Promise<vo
     return;
   }
   console.log('Firefox runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
+}
+
+// The segments of a stream that are separate .mp4 files must not be listed, a protected stream must be
+// marked, and both must hold before any popup is opened (the manifests are read when they are found).
+async function checkStreamParts(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${PARTS_PAGE}`);
+  const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
+  await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
+
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const storedProblem = async (): Promise<string | undefined> =>
+    partsProblem(await driver.executeAsyncScript<string>(`const done = arguments[arguments.length - 1]; (${registryScript('browser')}).then(done);`));
+  try {
+    await driver.wait(async () => (await storedProblem()) === undefined, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: stream parts: ${String(await storedProblem())}`);
+    return;
+  }
+
+  const pattern = `http://127.0.0.1/${PARTS_PAGE}*`;
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${encodeURIComponent(pattern)}`);
+  try {
+    await driver.wait(async () => (await driver.findElements(By.css('#media-list .card'))).length === PARTS_CARD_COUNT, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: stream parts: expected ${PARTS_CARD_COUNT} cards, popup shows ${JSON.stringify(await metaTexts(driver))}`);
+    return;
+  }
+  const notices = await driver.executeScript<string[]>("return [...document.querySelectorAll('#media-list .notice')].map((notice) => notice.textContent);");
+  if (notices.length !== 1 || !notices[0]?.includes('Widevine DRM')) {
+    problems.push(`firefox runtime: stream parts: expected one Widevine notice, got ${JSON.stringify(notices)}`);
+    return;
+  }
+  console.log('Firefox runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
 }
 
 /** The open popup, for reading the text of its cards (nothing to press, nothing to reload). */
@@ -668,6 +704,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkContextMenu(driver, testPage.url);
       await checkDetection(driver, testPage.url, downloadDir);
       await checkStreams(driver, testPage.url);
+      await checkStreamParts(driver, testPage.url);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);
       if (largeCheckEnabled()) {

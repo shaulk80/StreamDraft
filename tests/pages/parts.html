@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft stream parts test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft stream parts test page</h1>
+    <p>
+      The popup should list three videos for this tab: a DASH stream with a 360p quality, a DASH stream that is
+      protected (it says so and offers no download) and the plain file <code>direct.mp4</code>. The page also loads the
+      segments of both streams the way a player does. They are separate <code>.mp4</code> files of 120 KB, served as
+      <code>video/mp4</code>, and must not be listed. The toolbar badge counts 3, also before the popup was opened.
+    </p>
+    <p id="fetch-status">waiting</p>
+
+    <script>
+      const SEGMENTS = 4;
+
+      async function play(manifest, directory) {
+        await fetch('/parts/' + manifest);
+        await fetch('/parts/' + directory + '/init.mp4');
+        for (let number = 1; number <= SEGMENTS; number += 1) {
+          await fetch('/parts/' + directory + '/seg-' + number + '.mp4');
+        }
+      }
+
+      async function load() {
+        await play('plain.mpd', 'plain');
+        await play('drm.mpd', 'drm');
+        await fetch('/media/direct.mp4');
+      }
+      load()
+        .then(() => {
+          document.getElementById('fetch-status').textContent = 'fetched';
+        })
+        .catch((error) => {
+          document.getElementById('fetch-status').textContent = 'failed: ' + error;
+        });
+    </script>
+  </body>
+</html>

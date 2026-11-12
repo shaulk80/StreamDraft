@@ -18,6 +18,7 @@ import {
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
+import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
 //   1. unpack the zip and load it as an unpacked extension (Extensions.loadUnpacked);
@@ -175,6 +176,45 @@ async function checkStreams(browser: CdpConnection, extensionId: string, pageUrl
     return;
   }
   console.log('Chrome runtime: streams: the HLS master and the DASH manifest are read when the popup opens and list their qualities; the rendition playlist is not listed');
+}
+
+// The segments of a stream that are separate .mp4 files must not be listed, a protected stream must be
+// marked, and both must hold before any popup is opened (the manifests are read when they are found).
+async function checkStreamParts(browser: CdpConnection, extensionId: string, pageUrl: string): Promise<void> {
+  const page = await Page.open(browser, `${pageUrl}${PARTS_PAGE}`);
+  const fetched = await waitFor(async () =>
+    (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched')
+      ? true
+      : undefined,
+  );
+  if (!fetched) {
+    problems.push('chrome runtime: the stream parts test page did not finish loading');
+    return;
+  }
+
+  const options = await Page.open(browser, `chrome-extension://${extensionId}/options.html`);
+  const storedProblem = async (): Promise<string | undefined> => partsProblem(await options.evaluate<string>(registryScript('chrome')));
+  const stored = await waitFor(async () => ((await storedProblem()) === undefined ? true : undefined));
+  if (!stored) {
+    problems.push(`chrome runtime: stream parts: ${String(await storedProblem())}`);
+    return;
+  }
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${PARTS_PAGE}*`);
+  const popup = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
+  const listed = await waitFor(async () =>
+    (await popup.evaluate<number>("document.querySelectorAll('#media-list .card').length")) === PARTS_CARD_COUNT ? true : undefined,
+  );
+  if (!listed) {
+    problems.push(`chrome runtime: stream parts: expected ${PARTS_CARD_COUNT} cards, popup shows ${await listedFileNames(popup)}`);
+    return;
+  }
+  const notices = await popup.evaluate<string[]>("[...document.querySelectorAll('#media-list .notice')].map((notice) => notice.textContent)");
+  if (notices?.length !== 1 || !notices[0]?.includes('Widevine DRM')) {
+    problems.push(`chrome runtime: stream parts: expected one Widevine notice, got ${JSON.stringify(notices)}`);
+    return;
+  }
+  console.log('Chrome runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
 }
 
 // The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on
@@ -508,6 +548,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
 
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
     await checkStreams(browser, extensionId, server.url);
+    await checkStreamParts(browser, extensionId, server.url);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);
     if (largeCheckEnabled()) {
