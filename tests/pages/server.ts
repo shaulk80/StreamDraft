@@ -17,6 +17,7 @@ const PAGES: Readonly<Record<string, string>> = {
   '/jobs.html': 'jobs.html',
   '/large.html': 'large.html',
   '/parts.html': 'parts.html',
+  '/silent.html': 'silent.html',
 };
 
 // Streams with real (tiny) segments, built once: the download tests fetch them.
@@ -170,5 +171,5 @@ export function startTestPageServer(port: number): Promise<TestPageServer> {
 
 if (import.meta.main) {
   const started = await startTestPageServer(8123);
-  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream), ${started.url}large.html (a stream of 1.1 GB), ${started.url}parts.html (streams cut into .mp4 files, one protected)  (Ctrl+C to stop)`);
+  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream), ${started.url}large.html (a stream of 1.1 GB), ${started.url}parts.html (streams cut into .mp4 files, one protected), ${started.url}silent.html (a stream with no sound)  (Ctrl+C to stop)`);
 }

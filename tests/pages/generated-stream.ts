@@ -48,16 +48,35 @@ const FIXTURES = path.join(import.meta.dirname, '..', 'engine', 'fixtures');
 const MP4 = 'video/mp4';
 const SEGMENTS = 2;
 
+/** `folder` is the path under /gen, for example `dash/v1`. */
 function addRepresentation(files: Map<string, GeneratedFile>, folder: string, track: FixtureTrack): void {
-  files.set(`/gen/dash/${folder}/init.mp4`, { contentType: MP4, body: initSegment([track]) });
+  files.set(`/gen/${folder}/init.mp4`, { contentType: MP4, body: initSegment([track]) });
   for (let number = 0; number < SEGMENTS; number++) {
     const samples = [
       { duration: 500, size: 40, sync: number === 0 },
       { duration: 500, size: 40, sync: false },
     ];
     const fragment = { trackId: track.id, startTime: number * 1000, firstIndex: number * 2, samples };
-    files.set(`/gen/dash/${folder}/seg-${number + 1}.m4s`, { contentType: MP4, body: mediaSegment([fragment]) });
+    files.set(`/gen/${folder}/seg-${number + 1}.m4s`, { contentType: MP4, body: mediaSegment([fragment]) });
   }
+}
+
+/** A DASH stream with a picture and no sound track at all, for the "Audio only" failure (`/silent.html`). */
+const SILENT_MANIFEST = `<?xml version="1.0"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT2S">
+  <Period>
+    <AdaptationSet mimeType="video/mp4" contentType="video">
+      <Representation id="v1" bandwidth="800000" width="640" height="360" codecs="avc1.4d401e">
+        <SegmentTemplate timescale="1000" duration="1000" startNumber="1" initialization="v1/init.mp4" media="v1/seg-$Number$.m4s"/>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>
+`;
+
+function addSilentStream(files: Map<string, GeneratedFile>): void {
+  files.set('/gen/silent/manifest.mpd', { contentType: 'application/dash+xml', body: SILENT_MANIFEST });
+  addRepresentation(files, 'silent/v1', { id: 1, kind: 'video', timescale: 1000 });
 }
 
 const HLS_TYPE = 'application/vnd.apple.mpegurl';
@@ -90,8 +109,9 @@ function addJobStreams(files: Map<string, GeneratedFile>): void {
 export function generatedStreamFiles(): Map<string, GeneratedFile> {
   const files = new Map<string, GeneratedFile>();
   files.set('/gen/dash/manifest.mpd', { contentType: 'application/dash+xml', body: DASH_MANIFEST });
-  addRepresentation(files, 'v1', { id: 1, kind: 'video', timescale: 1000 });
-  addRepresentation(files, 'a1', { id: 1, kind: 'audio', timescale: 1000 });
+  addRepresentation(files, 'dash/v1', { id: 1, kind: 'video', timescale: 1000 });
+  addRepresentation(files, 'dash/a1', { id: 1, kind: 'audio', timescale: 1000 });
+  addSilentStream(files);
 
   files.set('/gen/hls/index.m3u8', { contentType: 'application/vnd.apple.mpegurl', body: HLS_PLAYLIST });
   files.set('/gen/hls/seg0.ts', { contentType: 'video/mp2t', body: readFileSync(path.join(FIXTURES, 'bipbop-gop-a.mpegts')) });

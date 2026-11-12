@@ -18,6 +18,7 @@ import {
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
+import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
@@ -376,6 +377,46 @@ async function checkSoundDownloads(popup: Page, offscreenOpen: () => Promise<boo
   console.log('Chrome runtime: audio only: the DASH sound and the sound cut out of the HLS video were saved as .m4a files with one sound track each');
 }
 
+// A stream with a picture and no sound track: "Audio only" must end with the words for it, and nothing
+// is saved.
+async function checkSilentStream(browser: CdpConnection, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const page = await Page.open(browser, `${pageUrl}${SILENT_PAGE}`);
+  const fetched = await waitFor(async () =>
+    (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched')
+      ? true
+      : undefined,
+  );
+  if (!fetched) {
+    problems.push('chrome runtime: the silent stream test page did not finish loading');
+    return;
+  }
+
+  const pattern = encodeURIComponent(`http://127.0.0.1/${SILENT_PAGE}*`);
+  const popup = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
+  const listed = await waitFor(async () =>
+    (await popup.evaluate<number>("document.querySelectorAll('#media-list .download').length")) === 1 ? true : undefined,
+  );
+  if (!listed) {
+    problems.push('chrome runtime: silent stream: the popup did not list the stream with qualities');
+    return;
+  }
+
+  const view: PopupPage = {
+    act: async (statements) => {
+      await popup.evaluate(`(() => { ${statements} })()`);
+    },
+    read: (expression) => popup.evaluate<string>(expression),
+    reload: async () => undefined,
+  };
+  const problem = await silentStreamProblem(view);
+  const saved = readdirSync(downloadDir).filter(isSilentStreamFile);
+  if (problem !== undefined || saved.length > 0) {
+    problems.push(`chrome runtime: silent stream: ${problem ?? ''} saved files: [${saved.join(', ')}]`);
+    return;
+  }
+  console.log('Chrome runtime: silent stream: "Audio only" on a video without a sound track ended with "This video has no sound to save." and saved nothing');
+}
+
 async function checkDetectionAndDownload(
   browser: CdpConnection,
   extensionId: string,
@@ -550,6 +591,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkStreams(browser, extensionId, server.url);
     await checkStreamParts(browser, extensionId, server.url);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
+    await checkSilentStream(browser, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);
     if (largeCheckEnabled()) {
       await checkLargeStream(browser, extensionId, server.url, downloadDir);

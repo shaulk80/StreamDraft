@@ -41,6 +41,7 @@ Leave it running. Pages, all on `http://127.0.0.1:8123/`:
 | Overlay page | `/` | the in-page button and the right-click entry |
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
+| Silent stream page | `/silent.html` | a stream with a picture and no sound track: "Audio only" must fail with a clear message (M3) |
 | Stream parts page | `/parts.html` | streams cut into `.mp4` segment files, one protected: the segments must not be listed (M3) |
 | Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
 | Job display page | `/jobs.html` | a slow and a broken stream: progress, Cancel, failure text (M3) |
@@ -107,17 +108,23 @@ Done by hand in Firefox and in Chrome, with the same results in both. The lines 
 | Real streams: protected (Shaka demo) | Passed after the fix | Found 50 segment cards (PR #17); one card marked protected now. |
 | Chrome's offscreen document | Passed | Checked by hand (Chrome only). |
 | Stream parts page (`/parts.html`) | Passed | Added after the Shaka run; also in both smoke tests. |
+| Silent stream page (`/silent.html`) | Passed | "Audio only" fails with the no-sound message and saves nothing; 360p saves a picture-only file. Also in both smoke tests. |
 
 M2 was checked completely when it was merged (PR #3), so nothing of it is open.
 
 **Still open:**
-- A video with no sound track ("This video has no sound to save."): no public example is known; covered by unit tests only.
+- A real video from a site without a sound track: no public example is known. The generated one (`/silent.html`) passed by hand and in both smoke tests.
 
 **Streams page** (`/streams.html`, M3):
 - [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
 - [ ] The rendition playlist the page loads (`v720/index.m3u8`) is not a card of its own. The badge counts 2 right after the page loads, before the popup is opened. (Seen in Firefox on 2026-11-12: it showed 3 and dropped to 2 when the popup opened; fixed by reading the manifest as soon as it is found, see `docs/decisions/0007-read-manifests-when-found.md`. Check it again.)
 - [ ] Download on these streams starts a job that fails (their segments do not exist on this page): the card ends with "Could not save the video." and the server's answer (e.g. "Segment 1 of 3: The server answered 404."; the numbers depend on the stream), the Download button comes back, nothing is saved. Use the download page below for a download that works.
 - [ ] Stop `pnpm run testpage`, reload the popup on a fresh tab of the page: the cards say the playlist could not be loaded, and read fine again after you restart the server and press Refresh.
+
+**Silent stream page** (`/silent.html`, M3): one DASH stream with a picture and no sound track at all.
+- [ ] The popup shows one card, `127.0.0.1 · DASH stream · mp4`, with 360p and "Audio only".
+- [ ] Pick "Audio only" and press Download: the card ends with "Could not save the video. This video has no sound to save.", the Download button comes back, and no file is saved.
+- [ ] Pick 360p and press Download: a picture-only MP4 is saved (made-up bytes, it does not play).
 
 **Stream parts page** (`/parts.html`, M3; added after the Shaka demo filled the list with 50 segment files):
 - [ ] The badge shows 3 within about a second, without the popup being opened, and stays 3.
@@ -150,7 +157,7 @@ M2 was checked completely when it was merged (PR #3), so nothing of it is open.
 - Plain DASH: `https://reference.dashif.org/dash.js/latest/samples/dash-if-reference-player/index.html` (DASH-IF reference player; pick a Big Buck Bunny stream from the list, e.g. the Akamai one with separate video and audio).
 - Protected: the Shaka Player demo, `https://shaka-project.github.io/shaka-player/demo/` (the old appspot address redirects there), Content tab: pick an asset tagged Widevine or PlayReady and load it. (These test assets use real DRM and play only where the browser has it; the card should say protected either way.) Owner's run of 2026-11-12 (Firefox): after Load the popup listed 50 "Direct file" cards (the cap) named like `v-0480p-1000k-libx264-s45.mp4`: the single segments of the stream, which are separate `.mp4` files served as `video/mp4`, were taken for videos. Fixed in branch `m3-stream-parts` (`/parts.html` reproduces it); the owner ran the Shaka demo again and confirmed the fix (Firefox, 2026-11-12).
 - [ ] On the HLS and the DASH page, download the lowest quality (shortest wait) and play the file in Firefox, Windows Media Player and VLC.
-- [ ] Audio only: on the same pages pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. (A video without a sound track should end with "Could not save the video. This video has no sound to save."; no public page for it is known, the unit and smoke tests cover it.)
+- [ ] Audio only: on the same pages pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. (A video without a sound track should end with "Could not save the video. This video has no sound to save."; try it on `/silent.html`, no public page for it is known.)
 - [ ] The protected stream is listed as protected, with the reason, and nothing is saved. On the Shaka demo only the one manifest of the loaded asset should appear (no "Direct file" cards named like `v-0480p-1000k-libx264-s45.mp4`).
 
 ## 7. Known gaps (do not report again)
@@ -172,7 +179,7 @@ M2 was checked completely when it was merged (PR #3), so nothing of it is open.
 
 So you can skip it, or look only at how it feels:
 
-- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; the two generated streams of `/download.html` download, are readable MP4 files (DASH: picture and sound) and end as "Saved to your downloads folder."; on `/jobs.html` a slow stream shows its progress (also in a popup opened again) and is cancelled, a stream with a missing part ends with the failure text; options page keeps a setting and rejects a bad template.
-- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name; the two generated streams of `/download.html` download through the offscreen document and the document closes afterwards; the same progress, Cancel and failure checks on `/jobs.html`.
+- Firefox smoke (`pnpm run smoke`, packaged zip, headless): popup and background answer; the four sample cards and their Download text; overlay button shown, hidden and shown again by the setting; right-click entry downloads and follows the setting; detection lists the 5 files and not the tiny one; popup, in-page button and menu downloads save files of the right size and name; the two generated streams of `/download.html` download, are readable MP4 files (DASH: picture and sound) and end as "Saved to your downloads folder."; on `/silent.html` "Audio only" on a stream without sound ends with the failure text and saves nothing; on `/jobs.html` a slow stream shows its progress (also in a popup opened again) and is cancelled, a stream with a missing part ends with the failure text; options page keeps a setting and rejects a bad template.
+- Chrome smoke (`pnpm run smoke:chrome`, packaged zip, headless Chrome): the service worker starts; the popup lists the same 5 files; popup Download and the in-page button save files of the right size and name; the two generated streams of `/download.html` download through the offscreen document and the document closes afterwards; the same silent-stream check, and the same progress, Cancel and failure checks on `/jobs.html`.
 - Large file check (opt-in, `SMOKE_LARGE=1` before `pnpm run smoke` or `pnpm run smoke:chrome`; about a minute each, 3 GB of disk): the 1.1 GB stream of `/large.html` downloads, the saved file has every sample with the right bytes, the memory of the browser grows by less than 768 MB, and the extension's storage is empty afterwards. Not run by `build.ps1` or in CI.
 - Not covered by any test: how it looks, the toolbar badge, the right-click entry in Chrome, loading the way a user does (Firefox signed install, Chrome Load unpacked).
