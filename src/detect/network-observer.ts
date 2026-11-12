@@ -30,6 +30,8 @@ export interface ObserverDeps {
   registry: Pick<MediaRegistry, 'add' | 'list' | 'clear'>;
   /** Undefined when the tab is gone or cannot be read. */
   lookupTab(tabId: number): Promise<TabInfo | undefined>;
+  /** A stream (HLS or DASH) was seen on the tab for the first time: time to read its manifest. */
+  onStreamFound?(tabId: number): void;
 }
 
 /** Responses that carry a whole file or a piece of one. Everything else is not a download. */
@@ -67,24 +69,24 @@ export class NetworkObserver {
       return;
     }
 
-    const item = await this.withPageDetails(details, candidate, quick.value);
+    // A player asks for the same file many times (one request per range): only
+    // the first sighting looks the tab up and starts reading a manifest.
+    const known = await this.deps.registry.list(details.tabId);
+    const isFirstSighting = !known.some((existing) => existing.id === quick.value.id);
+
+    const item = isFirstSighting ? await this.withPageDetails(details, candidate, quick.value) : quick.value;
     await this.deps.registry.add(details.tabId, item);
+    if (isFirstSighting && item.kind !== 'direct') {
+      this.deps.onStreamFound?.(details.tabId);
+    }
   }
 
-  /**
-   * A player asks for the same file many times (one request per range).
-   * Only the first sighting looks the tab up for the page title and address.
-   */
+  /** The page title and address for the item, from the tab. */
   private async withPageDetails(
     details: ResponseDetails,
     candidate: MediaCandidate,
     item: MediaItem,
   ): Promise<MediaItem> {
-    const known = await this.deps.registry.list(details.tabId);
-    if (known.some((existing) => existing.id === item.id)) {
-      return item;
-    }
-
     const tab = await this.deps.lookupTab(details.tabId);
     const detailed: Result<MediaItem> = classifyCandidate({
       ...candidate,

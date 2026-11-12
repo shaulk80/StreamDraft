@@ -29,7 +29,7 @@ export function classifyCandidate(candidate: MediaCandidate): Result<MediaItem> 
     return fail('Not a video or audio file.');
   }
   if (detected.kind !== 'direct') {
-    // The manifest is small by nature; its qualities are read later, when the popup opens.
+    // The manifest is small by nature; its qualities are read right after it is found (`StreamResolver`).
     return ok(buildStreamItem(url, detected.kind, candidate));
   }
 

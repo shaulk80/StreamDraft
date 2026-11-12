@@ -1,5 +1,6 @@
 import type { MediaItem, StreamDetails } from '../core/media.ts';
 import { fail, ok, type Result } from '../core/result.ts';
+import { isPartOf } from '../core/stream-parts.ts';
 import { mergeItem } from './merge.ts';
 
 /** The part of `browser.storage.session` the registry uses. */
@@ -38,14 +39,14 @@ export interface ResolvedStream {
   details: StreamDetails;
 }
 
-/** True when a stream in the list names `id` as one of its parts (a rendition's playlist). */
+/** True when a stream in the list names `id` as one of its parts (a rendition's playlist, a segment file). */
 function isPartOfAStream(items: readonly MediaItem[], id: string): boolean {
-  return items.some((item) => item.id !== id && item.partUrls?.includes(id) === true);
+  return items.some((item) => item.id !== id && isPartOf(item, id));
 }
 
 function withDetails(item: MediaItem, details: StreamDetails): MediaItem {
   // Cleared first, so details without an error or a reason also remove an old one.
-  return { ...item, manifestError: undefined, protectedReason: undefined, partUrls: undefined, ...details };
+  return { ...item, manifestError: undefined, protectedReason: undefined, partUrls: undefined, partRuns: undefined, ...details };
 }
 
 function isStoredItem(value: unknown): value is MediaItem {
@@ -91,7 +92,7 @@ export class MediaRegistry {
         return current;
       }
 
-      // A player loads the playlists of a stream's renditions too; they are not videos of their own.
+      // A player loads the playlists and segment files of a stream too; they are not videos of their own.
       if (isPartOfAStream(current.value, item.id)) {
         return ok(current.value);
       }
@@ -130,7 +131,8 @@ export class MediaRegistry {
    * Stores what reading the manifests found out. Only the manifest's facts are
    * written, so a title set in the meantime is kept; an item that is gone (the
    * tab navigated) is left out. Items that turned out to be parts of a stream
-   * (the playlists of a master playlist's renditions) are dropped.
+   * (the playlists of a master playlist's renditions, the segment files a
+   * manifest names) are dropped.
    */
   update(tabId: number, resolved: readonly ResolvedStream[]): Promise<Result<MediaItem[]>> {
     return this.enqueue(async () => {
