@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { isPartOf } from '../../src/core/stream-parts.ts';
 import { parseDashManifest } from '../../src/formats/dash.ts';
 import { parseHlsPlaylist } from '../../src/formats/hls.ts';
 import { summarizeDash, summarizeHls } from '../../src/formats/stream-summary.ts';
@@ -77,10 +78,13 @@ describe('summarizeHls: media playlist', () => {
     ]);
   });
 
-  test('it has no parts', () => {
+  test('its segments are its parts, kept as a few runs', () => {
     const result = hls(BIPBOP_MEDIA, MEDIA_URL);
 
-    expect(result.ok && result.value.partUrls).toBeUndefined();
+    expect(result.ok && result.value.partRuns?.length).toBeGreaterThan(0);
+    expect(result.ok && result.value.partRuns?.length).toBeLessThan(5);
+    expect(result.ok && isPartOf(result.value, 'https://cdn.example.com/video/gear3/fileSequence7.ts')).toBe(true);
+    expect(result.ok && isPartOf(result.value, MEDIA_URL)).toBe(false);
   });
 
   test('a live playlist gives an error', () => {
@@ -115,10 +119,11 @@ describe('summarizeDash', () => {
     expect(dash(LIST_MANIFEST).ok).toBe(true);
   });
 
-  test('its representations are not listed as parts', () => {
+  test('its segments are its parts, the manifest itself is not', () => {
     const result = dash(TEMPLATE_MANIFEST);
 
-    expect(result.ok && result.value.partUrls).toBeUndefined();
+    expect(result.ok && isPartOf(result.value, 'https://cdn.example.com/dash/bbb_30fps_1920x1080_8000k/bbb_30fps_1920x1080_8000k_32.m4v')).toBe(true);
+    expect(result.ok && isPartOf(result.value, MANIFEST_URL)).toBe(false);
   });
 
   test('a live manifest gives an error', () => {
@@ -131,5 +136,14 @@ describe('summarizeDash', () => {
     const result = dash(protectedManifest('<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>'));
 
     expect(result).toMatchObject({ ok: true, value: { protected: true, protectedReason: 'Widevine DRM', qualities: [] } });
+  });
+
+  test('a protected manifest still names its segment files, so a player\'s requests for them are not listed', () => {
+    const result = dash(
+      protectedManifest('<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>').replace('s$Number$.m4s', 's$Number$.mp4'),
+    );
+
+    expect(result.ok && isPartOf(result.value, 'https://cdn.example.com/dash/s3.mp4')).toBe(true);
+    expect(result.ok && isPartOf(result.value, 'https://cdn.example.com/dash/init.mp4')).toBe(true);
   });
 });
