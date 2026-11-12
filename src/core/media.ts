@@ -49,14 +49,30 @@ export interface MediaItem {
   /** Why the manifest could not be read, in words for the popup; only for streams. */
   manifestError?: string;
   /**
-   * HLS master playlists only: the addresses of the playlists of its renditions.
-   * They are parts of this stream, not videos of their own, and are not listed.
+   * Streams only: addresses the manifest names (the playlists of the renditions
+   * of an HLS master, the files and segments of a DASH stream). They are parts
+   * of this stream, not videos of their own, and are not listed.
    */
   partUrls?: string[];
+  /** Streams only: numbered segment files, kept as a pattern instead of one address each. */
+  partRuns?: PartRun[];
+}
+
+/**
+ * Addresses that differ only in one number: `prefix` + digits + `suffix`, where
+ * the prefix and suffix are the address without its query. How a stream's
+ * hundreds of numbered segments are remembered in a few bytes.
+ */
+export interface PartRun {
+  prefix: string;
+  suffix: string;
 }
 
 /** What reading a stream's manifest adds to its item. */
-export type StreamDetails = Pick<MediaItem, 'qualities' | 'protected' | 'protectedReason' | 'manifestError' | 'partUrls'>;
+export type StreamDetails = Pick<
+  MediaItem,
+  'qualities' | 'protected' | 'protectedReason' | 'manifestError' | 'partUrls' | 'partRuns'
+>;
 
 /**
  * A stream whose manifest has not been read yet (or could not be, see
