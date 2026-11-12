@@ -1,5 +1,6 @@
 import type { StreamDetails, StreamVariant } from '../core/media.ts';
 import { fail, ok, type Result } from '../core/result.ts';
+import { collectParts } from '../core/stream-parts.ts';
 import { buildQualityOptions } from '../core/streams.ts';
 import type { DashManifest } from './dash-types.ts';
 import type { HlsMasterPlaylist, HlsMediaPlaylist, HlsPlaylist } from './hls-types.ts';
@@ -19,8 +20,8 @@ function plainVariant(variant: StreamVariant): StreamVariant {
   };
 }
 
-function protectedDetails(reason: string): StreamDetails {
-  return { qualities: [], protected: true, protectedReason: reason };
+function protectedDetails(reason: string, segmentUrls: readonly string[] = []): StreamDetails {
+  return { qualities: [], protected: true, protectedReason: reason, ...collectParts(segmentUrls) };
 }
 
 function summarizeHlsMaster(master: HlsMasterPlaylist): Result<StreamDetails> {
@@ -48,7 +49,12 @@ function summarizeHlsMedia(media: HlsMediaPlaylist): Result<StreamDetails> {
   }
 
   // A playlist on its own is one rendition: itself.
-  return ok({ qualities: buildQualityOptions([{ variantId: media.url }], media.totalDurationSeconds), protected: false });
+  const segmentUrls = media.segments.flatMap((segment) => (segment.init === undefined ? [segment.url] : [segment.url, segment.init.url]));
+  return ok({
+    qualities: buildQualityOptions([{ variantId: media.url }], media.totalDurationSeconds),
+    protected: false,
+    ...collectParts(segmentUrls),
+  });
 }
 
 /** The quality list (or the protection) an HLS playlist gives its item. */
@@ -63,7 +69,7 @@ export function summarizeHls(playlist: HlsPlaylist): Result<StreamDetails> {
  */
 export function summarizeDash(manifest: DashManifest): Result<StreamDetails> {
   if (manifest.protectedReason !== undefined) {
-    return ok(protectedDetails(manifest.protectedReason));
+    return ok(protectedDetails(manifest.protectedReason, manifest.segmentUrls));
   }
   if (manifest.live) {
     return fail(LIVE_UNSUPPORTED);
@@ -74,5 +80,5 @@ export function summarizeDash(manifest: DashManifest): Result<StreamDetails> {
   if (qualities.length === 0) {
     return fail('The manifest lists no video or audio.');
   }
-  return ok({ qualities, protected: false });
+  return ok({ qualities, protected: false, ...collectParts(manifest.segmentUrls) });
 }

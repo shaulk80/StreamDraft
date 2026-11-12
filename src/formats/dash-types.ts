@@ -39,4 +39,9 @@ export interface DashManifest {
   audio: DashRepresentation[];
   /** What protects the stream, in words for the popup. Then `video` and `audio` are empty. */
   protectedReason?: string;
+  /**
+   * Every address the initialisation and media segments are fetched from, also
+   * of a protected stream, so a player's requests for them are not taken for videos.
+   */
+  segmentUrls: string[];
 }

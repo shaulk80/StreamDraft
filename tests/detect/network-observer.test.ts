@@ -10,6 +10,7 @@ import {
 
 /** `null` stands for a tab that is gone. */
 function createObserver(tab: TabInfo | null = { url: 'https://example.com/watch', title: 'Watch me' }) {
+  const onStreamFound = vi.fn<(tabId: number) => void>();
   const items: MediaItem[] = [];
   const registry = {
     add: vi.fn((_tabId: number, item: MediaItem) => {
@@ -20,8 +21,8 @@ function createObserver(tab: TabInfo | null = { url: 'https://example.com/watch'
     clear: vi.fn(() => Promise.resolve(ok(undefined))),
   };
   const lookupTab = vi.fn(() => Promise.resolve(tab ?? undefined));
-  const deps: ObserverDeps = { registry, lookupTab };
-  return { observer: new NetworkObserver(deps), registry, lookupTab, items };
+  const deps: ObserverDeps = { registry, lookupTab, onStreamFound };
+  return { observer: new NetworkObserver(deps), registry, lookupTab, items, onStreamFound };
 }
 
 function response(overrides: Partial<ResponseDetails> = {}): ResponseDetails {
@@ -92,6 +93,32 @@ describe('NetworkObserver.handleResponse', () => {
     await observer.handleResponse(response({ url, responseHeaders: [{ name: 'content-type', value: contentType }] }));
 
     expect(items).toMatchObject([{ kind, url, title: 'Watch me', qualities: [] }]);
+  });
+
+  test('a stream seen for the first time asks for its manifest to be read, after it was added', async () => {
+    const { observer, onStreamFound, registry } = createObserver();
+    const order: string[] = [];
+    registry.add.mockImplementationOnce((_tabId, item) => {
+      order.push('added');
+      return Promise.resolve(ok([item]));
+    });
+    onStreamFound.mockImplementation(() => order.push('read'));
+
+    await observer.handleResponse(response({ url: 'https://cdn.example.com/a.mpd', responseHeaders: [{ name: 'content-type', value: 'application/dash+xml' }] }));
+
+    expect(onStreamFound).toHaveBeenCalledWith(7);
+    expect(order).toEqual(['added', 'read']);
+  });
+
+  test('a stream seen again, or a plain file, does not ask for a manifest', async () => {
+    const { observer, onStreamFound } = createObserver();
+    const playlist = response({ url: 'https://cdn.example.com/a.m3u8', responseHeaders: [{ name: 'content-type', value: 'application/vnd.apple.mpegurl' }] });
+
+    await observer.handleResponse(response());
+    await observer.handleResponse(playlist);
+    await observer.handleResponse(playlist);
+
+    expect(onStreamFound).toHaveBeenCalledTimes(1);
   });
 
   test('a file seen again does not look the tab up again', async () => {

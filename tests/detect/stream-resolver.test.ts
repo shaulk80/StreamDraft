@@ -4,7 +4,7 @@ import { fail, ok } from '../../src/core/result.ts';
 import type { FetchText } from '../../src/detect/manifest-fetch.ts';
 import { MediaRegistry, type SessionAreaLike } from '../../src/detect/registry.ts';
 import { MAX_RESOLVED_AT_ONCE, StreamResolver } from '../../src/detect/stream-resolver.ts';
-import { MANIFEST_URL, TEMPLATE_MANIFEST } from '../formats/dash-fixtures.ts';
+import { MANIFEST_URL, protectedManifest, TEMPLATE_MANIFEST } from '../formats/dash-fixtures.ts';
 import { BIPBOP_MASTER, FMP4_MASTER, MASTER_URL, MEDIA_URL, BIPBOP_MEDIA } from '../formats/hls-fixtures.ts';
 
 class MemoryArea implements SessionAreaLike {
@@ -27,6 +27,11 @@ class MemoryArea implements SessionAreaLike {
 
 function stream(url: string, kind: 'hls' | 'dash'): MediaItem {
   return { id: url, url, title: 'Page', site: 'example.com', kind, container: 'mp4', qualities: [], protected: false };
+}
+
+/** A segment file a player fetched: a direct file as far as the network observer can tell. */
+function segment(url: string): MediaItem {
+  return { ...DIRECT, id: url, url };
 }
 
 const DIRECT: MediaItem = {
@@ -97,6 +102,42 @@ describe('StreamResolver.resolveTab', () => {
     await registry.add(1, stream(rendition, 'hls'));
 
     expect((await registry.list(1)).map((item) => item.id)).toEqual([MASTER_URL]);
+  });
+
+  const DASH_DIR = 'https://cdn.example.com/dash/';
+  const PROTECTED_MANIFEST = protectedManifest('<ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/>').replace(
+    's$Number$.m4s',
+    's$Number$.mp4',
+  );
+
+  test.each([
+    ['plain', TEMPLATE_MANIFEST, `${DASH_DIR}bbb_30fps_1920x1080_8000k/bbb_30fps_1920x1080_8000k_5.m4v`, `${DASH_DIR}bbb_30fps_1920x1080_8000k/bbb_30fps_1920x1080_8000k_6.m4v`],
+    ['protected', PROTECTED_MANIFEST, `${DASH_DIR}s2.mp4`, `${DASH_DIR}s3.mp4`],
+  ])('segment files of a %s DASH stream are not listed, whether they came before or after the manifest was read', async (_name, manifest, early, late) => {
+    const { registry, resolver } = await setup([stream(MANIFEST_URL, 'dash'), segment(early)], { [MANIFEST_URL]: manifest });
+
+    await resolver.resolveTab(1);
+    await registry.add(1, segment(late));
+
+    expect((await registry.list(1)).map((item) => item.id)).toEqual([MANIFEST_URL]);
+  });
+
+  test('a direct file the manifest does not name is still listed', async () => {
+    const { registry, resolver } = await setup([stream(MANIFEST_URL, 'dash')], { [MANIFEST_URL]: TEMPLATE_MANIFEST });
+    await resolver.resolveTab(1);
+
+    await registry.add(1, DIRECT);
+
+    expect((await registry.list(1)).map((item) => item.id)).toEqual([MANIFEST_URL, DIRECT.id]);
+  });
+
+  test('reads of one tab that overlap fetch a manifest once', async () => {
+    const { resolver, fetchText } = await setup([stream(MANIFEST_URL, 'dash')], { [MANIFEST_URL]: TEMPLATE_MANIFEST });
+
+    const counts = await Promise.all([resolver.resolveTab(1), resolver.resolveTab(1), resolver.resolveTab(1)]);
+
+    expect(counts).toEqual([1, 0, 0]);
+    expect(fetchText).toHaveBeenCalledTimes(1);
   });
 
   test('relative addresses resolve against the address after a redirect', async () => {

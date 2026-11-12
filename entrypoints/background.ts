@@ -127,7 +127,9 @@ export default defineBackground(() => {
 
   /** Finds videos from the network traffic of every tab and keeps them per tab. */
   function registerDetection(): void {
-    const observer = new NetworkObserver({ registry, lookupTab });
+    // A stream's manifest is read as soon as it is found: it names the stream's own
+    // files (segments, rendition playlists), which must not be listed as videos.
+    const observer = new NetworkObserver({ registry, lookupTab, onStreamFound: (tabId) => void resolver.resolveTab(tabId) });
 
     // A new page in a tab starts with an empty list. Seen before the response
     // of the new page, so a video opened as the page itself is not lost.

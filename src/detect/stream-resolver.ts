@@ -11,17 +11,34 @@ export const MAX_RESOLVED_AT_ONCE = 10;
 
 /**
  * Reads the manifests of a tab's streams that have none read yet and gives
- * their items qualities (or the reason they have none). Done when the popup
- * opens, not while browsing: most manifests a page loads are never looked at.
+ * their items qualities (or the reason they have none). Done as soon as a
+ * stream is found (so the files it is made of are not taken for videos and the
+ * badge counts right) and again when the popup opens (for a manifest that
+ * could not be read the first time).
  */
 export class StreamResolver {
+  /** The last read of each tab; the next one starts when it ends, so a manifest is never fetched twice at once. */
+  private readonly tails = new Map<number, Promise<number>>();
+
   constructor(
     private readonly registry: Pick<MediaRegistry, 'list' | 'update'>,
     private readonly fetchText: FetchText,
   ) {}
 
   /** Resolves with how many streams were read (successfully or not). Never fails. */
-  async resolveTab(tabId: number): Promise<number> {
+  resolveTab(tabId: number): Promise<number> {
+    const previous = this.tails.get(tabId) ?? Promise.resolve(0);
+    const next = previous.then(() => this.readPending(tabId));
+    this.tails.set(tabId, next);
+    void next.then(() => {
+      if (this.tails.get(tabId) === next) {
+        this.tails.delete(tabId);
+      }
+    });
+    return next;
+  }
+
+  private async readPending(tabId: number): Promise<number> {
     const items = await this.registry.list(tabId);
     const pending = items.filter(needsManifest).slice(0, MAX_RESOLVED_AT_ONCE);
     if (pending.length === 0) {

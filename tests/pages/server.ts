@@ -16,6 +16,7 @@ const PAGES: Readonly<Record<string, string>> = {
   '/download.html': 'download.html',
   '/jobs.html': 'jobs.html',
   '/large.html': 'large.html',
+  '/parts.html': 'parts.html',
 };
 
 // Streams with real (tiny) segments, built once: the download tests fetch them.
@@ -28,6 +29,8 @@ const MANIFESTS: Readonly<Record<string, { file: string; contentType: string }>>
   '/streams/v360/index.m3u8': { file: 'streams/v360/index.m3u8', contentType: 'application/vnd.apple.mpegurl' },
   '/streams/audio/index.m3u8': { file: 'streams/audio/index.m3u8', contentType: 'application/vnd.apple.mpegurl' },
   '/streams/manifest.mpd': { file: 'streams/manifest.mpd', contentType: 'application/dash+xml' },
+  '/parts/plain.mpd': { file: 'streams/parts-plain.mpd', contentType: 'application/dash+xml' },
+  '/parts/drm.mpd': { file: 'streams/parts-drm.mpd', contentType: 'application/dash+xml' },
 };
 
 interface MediaFile {
@@ -37,7 +40,20 @@ interface MediaFile {
 
 const KILOBYTE = 1024;
 
+/** The segments of the two streams of /parts.html: separate .mp4 files, as some players' streams are cut. */
+function partsFiles(): Record<string, MediaFile> {
+  const files: Record<string, MediaFile> = {};
+  for (const directory of ['plain', 'drm']) {
+    files[`/parts/${directory}/init.mp4`] = { contentType: 'video/mp4', sizeBytes: 2 * KILOBYTE };
+    for (let number = 1; number <= 4; number += 1) {
+      files[`/parts/${directory}/seg-${number}.mp4`] = { contentType: 'video/mp4', sizeBytes: 120 * KILOBYTE };
+    }
+  }
+  return files;
+}
+
 const MEDIA: Readonly<Record<string, MediaFile>> = {
+  ...partsFiles(),
   '/media/direct.mp4': { contentType: 'video/mp4', sizeBytes: 300 * KILOBYTE },
   '/media/clip.webm': { contentType: 'video/webm', sizeBytes: 250 * KILOBYTE },
   '/media/song.mp3': { contentType: 'audio/mpeg', sizeBytes: 200 * KILOBYTE },
@@ -154,5 +170,5 @@ export function startTestPageServer(port: number): Promise<TestPageServer> {
 
 if (import.meta.main) {
   const started = await startTestPageServer(8123);
-  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream), ${started.url}large.html (a stream of 1.1 GB)  (Ctrl+C to stop)`);
+  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream), ${started.url}large.html (a stream of 1.1 GB), ${started.url}parts.html (streams cut into .mp4 files, one protected)  (Ctrl+C to stop)`);
 }

@@ -18,8 +18,17 @@ interface SetScope {
 /** What one adaptation set contributes. */
 interface SetResult {
   kind: TrackKind | undefined;
+  /** Empty for a protected set. */
   representations: DashRepresentation[];
   protectedReason?: string;
+  segmentUrls: string[];
+}
+
+function segmentUrlsOf(representations: readonly DashRepresentation[]): string[] {
+  return representations.flatMap((representation) => [
+    ...(representation.init === undefined ? [] : [representation.init.url]),
+    ...representation.segments.map((segment) => segment.url),
+  ]);
 }
 
 /** The first value of an attribute along the chain (representation, adaptation set, period). */
@@ -98,7 +107,7 @@ function readAdaptationSet(set: XmlElement, scope: SetScope): Result<SetResult> 
   const kind = kindOf([set, scope.period]);
   const representations = childrenNamed(set, 'Representation');
   if (kind === undefined) {
-    return ok({ kind, representations: [] });
+    return ok({ kind, representations: [], segmentUrls: [] });
   }
 
   const setBase = baseUrlOf(set, scope.baseUrl);
@@ -108,19 +117,20 @@ function readAdaptationSet(set: XmlElement, scope: SetScope): Result<SetResult> 
 
   const setScope: SetScope = { ...scope, baseUrl: setBase.value };
   const built: DashRepresentation[] = [];
+  let protectedReason: string | undefined;
   for (const representation of representations) {
-    const protectedReason = protectionOf([representation, set]);
-    if (protectedReason !== undefined) {
-      return ok({ kind, representations: [], protectedReason });
-    }
+    protectedReason ??= protectionOf([representation, set]);
 
     const result = buildRepresentation(representation, set, kind, setScope);
-    if (!result.ok) {
+    if (result.ok) {
+      built.push(result.value);
+    } else if (protectedReason === undefined) {
       return result;
     }
-    built.push(result.value);
   }
-  return ok({ kind, representations: built });
+
+  // A protected set is not offered, but its segments are still the stream's own files.
+  return ok({ kind, representations: protectedReason === undefined ? built : [], protectedReason, segmentUrls: segmentUrlsOf(built) });
 }
 
 function periodDurationOf(root: XmlElement, period: XmlElement): number | undefined {
@@ -191,19 +201,27 @@ function readPeriod(root: XmlElement, period: XmlElement, manifestUrl: string): 
     live: root.attributes.get('type') === 'dynamic',
     video,
     audio,
+    segmentUrls: [],
   };
 
+  let protectedReason: string | undefined;
   for (const set of childrenNamed(period, 'AdaptationSet')) {
     const result = readAdaptationSet(set, scope);
     if (!result.ok) {
-      return result;
+      if (protectedReason === undefined) {
+        return result;
+      }
+      continue;
     }
-    if (result.value.protectedReason !== undefined) {
-      return ok({ ...manifest, video: [], audio: [], protectedReason: result.value.protectedReason });
-    }
+
+    protectedReason ??= result.value.protectedReason;
+    manifest.segmentUrls.push(...result.value.segmentUrls);
     (result.value.kind === 'video' ? video : audio).push(...result.value.representations);
   }
 
+  if (protectedReason !== undefined) {
+    return ok({ ...manifest, video: [], audio: [], protectedReason });
+  }
   if (video.length === 0 && audio.length === 0) {
     return fail('The manifest lists no video or audio.');
   }

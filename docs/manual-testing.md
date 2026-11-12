@@ -41,6 +41,7 @@ Leave it running. Pages, all on `http://127.0.0.1:8123/`:
 | Overlay page | `/` | the in-page button and the right-click entry |
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
+| Stream parts page | `/parts.html` | streams cut into `.mp4` segment files, one protected: the segments must not be listed (M3) |
 | Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
 | Job display page | `/jobs.html` | a slow and a broken stream: progress, Cancel, failure text (M3) |
 | Large stream page | `/large.html` | one stream of 1.1 GB, built by the server as it is asked for (M3, large file check) |
@@ -92,38 +93,47 @@ Two checklists follow, one per milestone: **5. M2** (finding videos and download
 
 ## 6. M3 checklist: streams, audio only, progress and large files
 
+Owner's run of 2026-11-12 (Firefox): everything passed except the badge line below (open bug), the private window line (it works, see there) and the lines that told the owner too little about how to check (rewritten below). The "Real streams" group is not done yet.
+
 **Streams page** (`/streams.html`, M3):
 - [ ] The popup shows two cards, briefly "Reading the stream..." and then the qualities: `127.0.0.1 · HLS stream · mp4` with 720p, 360p, Audio only; `127.0.0.1 · DASH stream · mp4` with 720p (8.9 MB), 360p (2.9 MB), Audio only (234 KB).
-- [ ] The rendition playlist the page loads (`v720/index.m3u8`) is not a card of its own. The badge counts 2.
+- [ ] The rendition playlist the page loads (`v720/index.m3u8`) is not a card of its own. The badge counts 2 right after the page loads, before the popup is opened. (Seen in Firefox on 2026-11-12: it showed 3 and dropped to 2 when the popup opened; fixed by reading the manifest as soon as it is found, see `docs/decisions/0007-read-manifests-when-found.md`. Check it again.)
 - [ ] Download on these streams starts a job that fails (their segments do not exist on this page): the card ends with "Could not save the video." and the server's answer (e.g. "Segment 1 of 3: The server answered 404."; the numbers depend on the stream), the Download button comes back, nothing is saved. Use the download page below for a download that works.
 - [ ] Stop `pnpm run testpage`, reload the popup on a fresh tab of the page: the cards say the playlist could not be loaded, and read fine again after you restart the server and press Refresh.
+
+**Stream parts page** (`/parts.html`, M3; added after the Shaka demo filled the list with 50 segment files):
+- [ ] The badge shows 3 within about a second, without the popup being opened, and stays 3.
+- [ ] The popup shows three cards: `127.0.0.1 · DASH stream · mp4` with a 360p quality and a Download button; a second `127.0.0.1 · DASH stream · mp4` that says "Protected (Widevine DRM). StreamDraft does not download protected videos." and has no Download button; and `127.0.0.1 · Direct file · direct.mp4`. None of the `seg-1.mp4` to `seg-4.mp4` files of the two streams is listed.
 
 **Stream download page** (`/download.html`, M3 task 9):
 - [ ] The popup shows two cards: `127.0.0.1 · DASH stream · mp4` (360p, Audio only) and `127.0.0.1 · HLS stream · mp4`.
 - [ ] Download on the DASH card: the Download button waits, the card shows "Starting..." or a progress bar (it is over quickly), then "Saved to your downloads folder.", the button comes back, and the file `StreamDraft stream download test page [360p].mp4` is in the download folder, a few KB. The HLS card saves `... [original].mp4`. (The pictures are made-up bytes: the files are valid MP4 structure but do not play.)
-- [ ] Chrome only: the engine runs in an offscreen document that exists only while a download runs (the smoke test sees it open and then closed; whether `chrome://extensions` lists it under Inspect views is not checked).
+- [ ] Chrome only, optional: the engine runs in an "offscreen document", a hidden page of the extension that Chrome needs because a service worker cannot hold the file. You never see it; it exists only while a download runs and the smoke test already checks that it opens and closes. By hand: on `/large.html` (a download of about a minute) press Shift+Esc to open Chrome's Task Manager, start the download and look for a second "Extension: StreamDraft" row that appears during the download and is gone after "Saved".
 - [ ] Pick "Audio only" on the DASH card and press Download: the file `... [audio].m4a` is saved (a sound track of 4 samples, a few KB). On the HLS card the sound is cut out of the video segments: `... [audio].m4a` again, named with `(1)` after the first. (Made-up bytes: the files have valid structure but do not play.)
 - [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads one after the other: two downloads of one name started in the same instant sometimes make Firefox interrupt one of them (seen in the smoke test); the card then says "Could not save the video. The browser could not save the finished video."
 
 **Job display page** (`/jobs.html`, M3 task 11): the popup lists two HLS streams of the same title; the first has 40 parts of 0.4 seconds each, in the second the second part is missing.
 - [ ] Download on the first card: the button is disabled, a progress bar fills and the line says "Downloading: 12% (...)" with a growing size; a Cancel button sits next to it.
 - [ ] While it runs, close the popup and open it again: the card shows the running job again (bar, text, Cancel), and the Download button is disabled.
-- [ ] Press Cancel: the line says "Cancelled.", the bar and Cancel disappear, the Download button comes back, nothing is saved. In Chrome the offscreen document closes.
+- [ ] Press Cancel: the line says "Cancelled.", the bar and Cancel disappear, the Download button comes back, nothing is saved. (In Chrome the offscreen document closes too; see the optional line above for how to look.)
 - [ ] Download on the second card: the line says "Could not save the video." with the server's answer ("Segment 2 of 2: The server answered 404."); the Download button comes back.
 - [ ] Let the first card run to the end (about 5 seconds): the bar fills, "Joining the parts and saving..." (no Cancel), then "Saved to your downloads folder."
 - [ ] A job whose background was killed (close the browser during a download, start it again, open the popup): the card does not show a stale job forever; after 10 minutes without news it is forgotten.
-- [ ] Firefox private window: Download says the browser would not give the extension space (OPFS is not available there). Not verified yet.
+- [ ] Firefox private window (allow StreamDraft there first: `about:addons`, StreamDraft, "Run in Private Windows"): the owner's run on 2026-11-12 downloaded fine. Expected: the extension's background page is not a private page, so its storage works. If Download ever says the browser would not give the extension space, note the Firefox version.
 
 **Large stream page** (`/large.html`, M3 task 13): one DASH stream, 720p and Audio only, of 68 parts of 16 MB. Needs about 3 GB of free disk space for a minute or two, and a task manager open next to the browser. (`SMOKE_LARGE=1` runs the same download in the smoke tests and measures the memory for you; this is the by-hand version.)
 - [ ] Download the 720p card: the bar fills in a minute or less and the card ends with "Saved to your downloads folder."; `StreamDraft large stream test page [720p].mp4` is about 1.1 GB. (Made-up bytes: it does not play.)
 - [ ] While it runs, watch the memory of the browser in the task manager (Firefox: the extension's tab process; Chrome: the "Extension" renderer, there is one more while the offscreen document lives). It should climb by a few hundred MB and stay there, not follow the bar up to 1.1 GB. Measured with the smoke tests: Firefox +150 to +380 MB, Chrome +400 to +590 MB.
-- [ ] Afterwards the temporary files are gone: in Firefox `about:preferences#privacy` > Cookies and Site Data, or in Chrome the site data of the extension, shows nothing large. (The smoke test reads the storage use of the extension after the job: 0 MB.)
-- [ ] Press Cancel half way: "Cancelled.", the memory falls back, and the disk space is given back.
+- [ ] Afterwards the temporary files are gone. The browser's own screens do not list an extension's storage, so ask the extension's background code (the smoke test asks the same question): Firefox: `about:debugging#/runtime/this-firefox`, StreamDraft, "Inspect", tab Console. Chrome: `chrome://extensions`, StreamDraft, "service worker" next to Inspect views, tab Console. Type `navigator.storage.estimate().then((e) => console.log(Math.round(e.usage / 1048576) + " MB"))` (Firefox may ask you to type `allow pasting` first) and press Enter. Expected: a few MB at most, not hundreds. Run it once before and once after the download.
+- [ ] Press Cancel half way: "Cancelled.", the memory falls back, and the disk space is given back (same console line: back to a few MB).
 
-**Real streams** (any public page; the made-up test pages cannot show this):
-- [ ] On a page with a plain (not protected) HLS or DASH video, download a low quality and play the file in Firefox, Windows Media Player and VLC.
-- [ ] Audio only: on the same kind of page, pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. A video without a sound track should end with "Could not save the video. This video has no sound to save."
-- [ ] A stream protected by DRM (a commercial streaming site) is listed as protected, with the reason, and nothing is saved.
+**Real streams** (public player demo pages; the made-up test pages cannot show this). On each page press play first, then open the popup. If a card says the playlist could not be loaded, the host probably checks the `Referer` (known gap below): try another page.
+- Plain HLS: `https://hls-js.netlify.app/demo/` (hls.js demo; it starts Big Buck Bunny from `test-streams.mux.dev`, several qualities, with sound).
+- Plain DASH: `https://reference.dashif.org/dash.js/latest/samples/dash-if-reference-player/index.html` (DASH-IF reference player; pick a Big Buck Bunny stream from the list, e.g. the Akamai one with separate video and audio).
+- Protected: the Shaka Player demo, `https://shaka-project.github.io/shaka-player/demo/` (the old appspot address redirects there), Content tab: pick an asset tagged Widevine or PlayReady and load it. (These test assets use real DRM and play only where the browser has it; the card should say protected either way.) Owner's run of 2026-11-12 (Firefox): after Load the popup listed 50 "Direct file" cards (the cap) named like `v-0480p-1000k-libx264-s45.mp4`: the single segments of the stream, which are separate `.mp4` files served as `video/mp4`, were taken for videos. Fixed in branch `m3-stream-parts` (`/parts.html` reproduces it); the owner ran the Shaka demo again and confirmed the fix (Firefox, 2026-11-12).
+- [ ] On the HLS and the DASH page, download the lowest quality (shortest wait) and play the file in Firefox, Windows Media Player and VLC.
+- [ ] Audio only: on the same pages pick "Audio only", save, and play the `.m4a` in Firefox, Windows Media Player and VLC. (A video without a sound track should end with "Could not save the video. This video has no sound to save."; no public page for it is known, the unit and smoke tests cover it.)
+- [ ] The protected stream is listed as protected, with the reason, and nothing is saved. On the Shaka demo only the one manifest of the loaded asset should appear (no "Direct file" cards named like `v-0480p-1000k-libx264-s45.mp4`).
 
 ## 7. Known gaps (do not report again)
 
@@ -135,6 +145,8 @@ Two checklists follow, one per milestone: **5. M2** (finding videos and download
 - Temporary files of a stream download that was cut off by a browser crash stay in the extension's private storage until a later version cleans them (M6).
 - Live streams and DASH with several periods are listed with an error for now.
 - A stream's manifest is read by the extension without the page's `Referer`: hosts that check it make the card say the playlist could not be loaded.
+- Segment files of an HLS stream whose segments are `.mp4` files, and of a DASH stream with several periods, can still be listed as videos: their segments are named only in playlists or manifests that are not read (`docs/decisions/0007-read-manifests-when-found.md`).
+- A page's manifests are fetched by the extension as soon as the page loads them, not only when the popup opens.
 - The extension asks for access to all sites (detection needs it; see `docs/decisions/0002-detection-permissions.md`).
 - The right-click entry has not been run in Chrome by the automated tests (headless Chrome cannot operate the menu): check it by hand there.
 
