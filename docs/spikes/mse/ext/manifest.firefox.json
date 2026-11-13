@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "StreamDraft MSE spike",
+  "version": "0.0.1",
+  "permissions": ["scripting"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "scripts": ["background.js"] },
+  "browser_specific_settings": { "gecko": { "id": "mse-spike@example.invalid", "strict_min_version": "140.0" } },
+  "content_scripts": [
+    { "matches": ["http://127.0.0.1/*"], "js": ["relay.js"], "run_at": "document_start" }
+  ]
+}
