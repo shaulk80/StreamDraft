@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { formatSiteList, matchPatternsFor, normalizeSite, parseSiteList } from '../../src/core/site-list.ts';
+import { formatSiteList, isListedSite, matchPatternsFor, normalizeSite, parseSiteList } from '../../src/core/site-list.ts';
 
 describe('normalizeSite', () => {
   test.each([
@@ -67,5 +67,24 @@ describe('matchPatternsFor', () => {
     ['no sites', [], []],
   ])('%s', (_name, sites, expected) => {
     expect(matchPatternsFor(sites)).toEqual(expected);
+  });
+});
+
+describe('isListedSite', () => {
+  test.each<[string, string[], string | undefined, boolean]>([
+    ['the site itself', ['youtube.com'], 'https://youtube.com/watch?v=1', true],
+    ['a subdomain', ['youtube.com'], 'https://www.youtube.com/watch?v=1', true],
+    ['another site that ends the same way', ['youtube.com'], 'https://notyoutube.com/', false],
+    ['a site that only contains the name', ['youtube.com'], 'https://youtube.com.evil.example/', false],
+    ['an unlisted site', ['youtube.com'], 'https://example.com/', false],
+    ['one of several', ['example.org', 'youtube.com'], 'http://m.youtube.com/', true],
+    ['an address', ['127.0.0.1'], 'http://127.0.0.1:8123/mse.html', true],
+    ['a name that merely ends like an address', ['127.0.0.1'], 'http://10.127.0.0.1/', false],
+    ['an address that is not a web page', ['youtube.com'], 'moz-extension://abc/popup.html', false],
+    ['no address', ['youtube.com'], undefined, false],
+    ['text that is no address', ['youtube.com'], 'youtube.com', false],
+    ['no sites', [], 'https://youtube.com/', false],
+  ])('%s', (_name, sites, address, expected) => {
+    expect(isListedSite(sites, address)).toBe(expected);
   });
 });

@@ -3,7 +3,10 @@ import { MOCK_MEDIA } from '../../src/core/mock-media.ts';
 import { PING, rescanMediaMessage, resolveStreamsMessage, type PongPayload } from '../../src/core/messages.ts';
 import type { Result } from '../../src/core/result.ts';
 import type { Settings } from '../../src/core/settings.ts';
+import { isListedSite } from '../../src/core/site-list.ts';
 import { MediaRegistry, registryKey } from '../../src/detect/registry.ts';
+import { backgroundCaptureClient } from '../../src/ui/capture-client.ts';
+import { createCapturePanel } from '../../src/ui/capture-panel.ts';
 import { backgroundCancelAction, backgroundDownloadAction, demoDownloadAction, type DownloadAction } from '../../src/ui/download-client.ts';
 import { StorageJobSource } from '../../src/ui/job-source.ts';
 import { JobTracker } from '../../src/ui/job-tracker.ts';
@@ -41,17 +44,41 @@ function mockVideos(): readonly MediaItem[] | undefined {
 // The popup is shown over the tab it belongs to. "?tabUrl=PATTERN" (a match
 // pattern such as "http://127.0.0.1/page.html*") picks the tab by address instead,
 // which is how the smoke test (it opens the popup as a tab of its own) looks at a page.
-async function resolveTabId(): Promise<number | undefined> {
+async function resolveTab(): Promise<{ id: number; url?: string } | undefined> {
   const pattern = new URLSearchParams(window.location.search).get('tabUrl');
 
   try {
     const query = pattern === null ? { active: true, currentWindow: true } : { url: pattern };
     const [tab] = await browser.tabs.query(query);
-    return tab?.id;
+    return tab?.id === undefined ? undefined : { id: tab.id, url: tab.url };
   } catch (error) {
     console.error('StreamDraft: could not find the current tab', error);
     return undefined;
   }
+}
+
+/**
+ * The "Record this page" section, for a tab on a site the player capture is switched on for.
+ * It follows the page's recording for as long as the popup is open.
+ */
+async function showCapture(tab: { id: number; url?: string }, settings: Settings, jobs: JobTracker, send: (message: unknown) => Promise<unknown>): Promise<void> {
+  const container = document.getElementById('capture');
+  if (!container || !settings.playerCapture || !isListedSite(settings.playerCaptureSites, tab.url)) {
+    return;
+  }
+
+  const panel = createCapturePanel(document, {
+    client: backgroundCaptureClient(send, tab.id),
+    jobs,
+    itemId: `capture:${tab.id}`,
+    every: (callback, milliseconds) => {
+      const timer = window.setInterval(callback, milliseconds);
+      return () => window.clearInterval(timer);
+    },
+  });
+  container.append(panel.element);
+  container.hidden = false;
+  await panel.start();
 }
 
 /** Shows the videos found on the tab and keeps the list up to date while the popup is open. */
@@ -60,16 +87,19 @@ async function showTabVideos(
   emptyNotice: HTMLElement,
   settings: Settings,
 ): Promise<void> {
-  const tabId = await resolveTabId();
-  if (tabId === undefined) {
+  const tab = await resolveTab();
+  if (tab === undefined) {
     renderMediaList(list, emptyNotice, [], settings, noDownload);
     return;
   }
+  const tabId = tab.id;
   const send = (message: unknown): Promise<unknown> => browser.runtime.sendMessage(message);
   const download = backgroundDownloadAction(send, tabId);
   // Stream jobs run in the background and save their state; the popup follows it and can stop a job.
   const jobs = new JobTracker(new StorageJobSource(browser.storage), backgroundCancelAction(send), () => Date.now());
   await jobs.start();
+  // Not awaited: the list of videos does not wait for the page's recording to answer.
+  void showCapture(tab, settings, jobs, send);
 
   const registry = new MediaRegistry(browser.storage.session);
   let shown: string | undefined;

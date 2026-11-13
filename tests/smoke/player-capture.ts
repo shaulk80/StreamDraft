@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { readFlatMp4 } from '../engine/flat-mp4-reader.ts';
 import { ffprobeProblem } from './ffprobe.ts';
@@ -158,6 +158,142 @@ export function recordedFileProblem(file: string, expectedSamples: number[], exp
   return ffprobeProblem(file, expectedKinds);
 }
 
+/** What the popup's "Record this page" section shows, read from the popup that `popupScript` keeps in a frame. */
+interface PopupState {
+  shown: boolean;
+  recordVisible: boolean;
+  text: string;
+  saveEnabled: boolean;
+  jobText: string;
+}
+
+const POPUP_QUERY = '?popup=1';
+
+/**
+ * An extension-page script that opens the popup in a frame (once), then runs `body` with `frame`, `section()`
+ * (the capture section of the popup) and `button(label)` at hand. The popup is the real one: same code, same
+ * messages as when a user opens it; only the tab it looks at is chosen by address, as the other smoke checks do.
+ */
+function popupScript(api: 'browser' | 'chrome', body: string): string {
+  return `(async () => {
+    let frame = document.getElementById('popup-frame');
+    if (!frame) {
+      frame = document.createElement('iframe');
+      frame.id = 'popup-frame';
+      const pattern = 'http://127.0.0.1/${MSE_PAGE}${POPUP_QUERY}*';
+      frame.src = ${api}.runtime.getURL('popup.html?tabUrl=' + encodeURIComponent(pattern));
+      document.body.append(frame);
+      await new Promise((resolve) => frame.addEventListener('load', resolve, { once: true }));
+    }
+    const section = () => frame.contentDocument.querySelector('#capture');
+    const button = (label) => [...section().querySelectorAll('button')].find((candidate) => candidate.textContent === label);
+    ${body}
+  })()`;
+}
+
+const POPUP_STATE_BODY = `
+    const root = section();
+    const status = root && root.querySelector('p.result[role=status]');
+    const jobLine = root && root.querySelector('.job .result');
+    const save = root && button('Save');
+    const record = root && (button('Record') || button('Record again'));
+    return JSON.stringify({
+      shown: !!root && !root.hidden && root.children.length > 0,
+      recordVisible: !!record && !record.hidden,
+      text: status && !status.hidden ? status.textContent : '',
+      saveEnabled: !!save && !save.hidden && !save.disabled,
+      jobText: jobLine ? jobLine.textContent : '',
+    });`;
+
+async function popupState(browser: CaptureSmokeBrowser): Promise<PopupState | undefined> {
+  const text = await browser.inExtension(popupScript(browser.api, POPUP_STATE_BODY));
+  try {
+    return text === undefined ? undefined : (JSON.parse(text) as PopupState);
+  } catch {
+    return undefined;
+  }
+}
+
+async function popupClick(browser: CaptureSmokeBrowser, buttonLabel: string): Promise<boolean> {
+  const body = `const target = section() && button(${JSON.stringify(buttonLabel)}); if (!target) { return 'no'; } target.click(); return 'yes';`;
+  return (await browser.inExtension(popupScript(browser.api, body))) === 'yes';
+}
+
+async function waitForPopup(browser: CaptureSmokeBrowser, accept: (state: PopupState) => boolean): Promise<PopupState | undefined> {
+  let found: PopupState | undefined;
+  await waitUntil(browser, async () => {
+    const state = await popupState(browser);
+    found = state !== undefined && accept(state) ? state : undefined;
+    return found !== undefined;
+  });
+  return found;
+}
+
+/** Takes the popup out again, so that it stops asking and the next checks see only their own messages. */
+async function removePopupFrame(browser: CaptureSmokeBrowser): Promise<void> {
+  await browser.inExtension("(async () => { document.getElementById('popup-frame')?.remove(); return 'removed'; })()");
+}
+
+/**
+ * The popup's part of the player capture, the way a user does it: Record is offered, pressing it reloads the
+ * page, the section follows the recording to "whole video recorded", "Save audio only" saves the file under a
+ * job panel, and "Cancel recording" takes the recording away and offers Record again.
+ */
+async function checkPopupRecording(browser: CaptureSmokeBrowser, pageUrl: string, downloadDir: string, problems: string[], label: string): Promise<void> {
+  const fail = (message: string): void => {
+    problems.push(`${label}: popup: ${message}`);
+  };
+
+  await browser.openTestPage(`${pageUrl}${MSE_PAGE}${POPUP_QUERY}`);
+  const first = await waitForPage(browser);
+  const offered = await waitForPopup(browser, (state) => state.shown && state.recordVisible);
+  if (first === undefined || offered === undefined || offered.text !== '') {
+    fail(`a page that was not recorded should show "Record" and nothing else, got ${JSON.stringify(offered)}`);
+    return;
+  }
+
+  if (!(await popupClick(browser, 'Record'))) {
+    fail('there is no Record button to press');
+    return;
+  }
+  const reloaded = await waitForPage(browser, first.loadId);
+  const ready = await waitForPopup(browser, (state) => state.saveEnabled);
+  if (reloaded === undefined || ready === undefined || !ready.text.includes('The whole video is recorded')) {
+    fail(`pressing Record should reload the page and end at "The whole video is recorded" with Save enabled, got ${JSON.stringify(ready)}`);
+    return;
+  }
+
+  if (!(await popupClick(browser, 'Save audio only'))) {
+    fail('there is no "Save audio only" button to press');
+    return;
+  }
+  const saved = await waitForPopup(browser, (state) => state.jobText === 'Saved to your downloads folder.');
+  const file = await savedFile(browser, downloadDir, MSE_SOUND_FILE);
+  if (saved === undefined || file === undefined) {
+    fail(`saving should show "Saved to your downloads folder." and leave ${MSE_SOUND_FILE}; the popup said ${JSON.stringify(await popupState(browser))}`);
+    return;
+  }
+  const wrong = recordedFileProblem(file, [SOUND_SAMPLES], ['audio']);
+  if (wrong !== undefined) {
+    fail(wrong);
+    return;
+  }
+  // The next check saves the same file name again, and must see its own file.
+  unlinkSync(file);
+
+  if (!(await popupClick(browser, 'Cancel recording'))) {
+    fail('there is no "Cancel recording" button to press');
+    return;
+  }
+  const cancelled = await waitForPopup(browser, (state) => state.recordVisible && !state.saveEnabled);
+  const status = await statusOf(browser);
+  if (cancelled === undefined || status === undefined || status.buffers.length !== 0) {
+    fail(`after Cancel recording the popup should offer Record and the page should hold nothing, got ${JSON.stringify(cancelled)} and ${JSON.stringify(status)}`);
+    return;
+  }
+  console.log(`${label}: the popup offered Record, followed the recording to "whole video recorded", saved the sound under a job panel and removed the recording on Cancel`);
+}
+
 /** Opens the test page, arms the tab (which reloads it) and gives the finished load of the page. */
 async function recordedLoad(browser: CaptureSmokeBrowser, pageUrl: string, query: string): Promise<{ page?: PageResult; problem?: string }> {
   await browser.openTestPage(`${pageUrl}${MSE_PAGE}${query}`);
@@ -315,6 +451,11 @@ export async function checkPlayerCapture(browser: CaptureSmokeBrowser, pageUrl: 
 
   try {
     if ((await checkRegistered(browser, problems, label)) && (await checkHidingAndStatus(browser, pageUrl, problems, label))) {
+      try {
+        await checkPopupRecording(browser, pageUrl, downloadDir, problems, label);
+      } finally {
+        await removePopupFrame(browser);
+      }
       await checkRecording(browser, pageUrl, downloadDir, problems, label);
       await checkRefusals(browser, pageUrl, problems, label);
     }

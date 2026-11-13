@@ -49,6 +49,22 @@ export function formatSiteList(sites: readonly string[]): string {
 }
 
 /**
+ * Whether a page address belongs to one of the sites, the way `matchPatternsFor`
+ * matches it: the site itself or a subdomain of it, over http or https.
+ */
+export function isListedSite(sites: readonly string[], address: string | undefined): boolean {
+  if (address === undefined || !URL.canParse(address)) {
+    return false;
+  }
+
+  const page = new URL(address);
+  if (page.protocol !== 'http:' && page.protocol !== 'https:') {
+    return false;
+  }
+  return sites.some((site) => page.hostname === site || (!IPV4.test(site) && page.hostname.endsWith(`.${site}`)));
+}
+
+/**
  * Browser match patterns for the sites: the site itself and its subdomains.
  * An address (`127.0.0.1`) or a name without a dot (`localhost`) has no
  * subdomains to match.
