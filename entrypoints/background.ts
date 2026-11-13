@@ -24,7 +24,11 @@ import { CaptureRegistrar } from '../src/extractors/capture-registration.ts';
 import { checkPageData } from '../src/extractors/page-data.ts';
 import { PageDataStore } from '../src/extractors/page-data-store.ts';
 import { ExtractorRegistry } from '../src/extractors/extractor-registry.ts';
-import { fail, ok } from '../src/core/result.ts';
+import { ARM_KEY } from '../src/extractors/capture/arm-marker.ts';
+import { parseCaptureCommandMessage, type CaptureCommand } from '../src/extractors/capture/capture-commands.ts';
+import { BrowserCapturePages, type PagesApi } from '../src/extractors/capture/capture-pages.ts';
+import { CaptureService } from '../src/extractors/capture/capture-service.ts';
+import { fail, ok, type Result } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
@@ -41,7 +45,10 @@ export default defineBackground(() => {
   const extractors = new ExtractorRegistry();
   const pageData = new PageDataStore(browser.storage.session);
   // The player capture script exists in the browser only while the setting is on, and only for the listed sites.
-  const capture = new CaptureRegistrar(browser.scripting, 'content-scripts/player-capture-main.js');
+  const capture = new CaptureRegistrar(browser.scripting, {
+    main: 'content-scripts/player-capture-main.js',
+    page: 'content-scripts/player-capture-page.js',
+  });
   const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
 
   // Streams are downloaded by the engine: in this page on Firefox, in an offscreen
@@ -72,6 +79,15 @@ export default defineBackground(() => {
     loadSettings: () => store.load(),
     today: () => new Date().toISOString().slice(0, 10),
     streams: coordinator,
+  });
+
+  // The player capture's recording of a tab is kept by the page; this asks for it and starts the job that joins it.
+  const captures = new CaptureService({
+    pages: new BrowserCapturePages(createPagesApi()),
+    streams: coordinator,
+    tab: (tabId) => lookupTab(tabId),
+    loadSettings: () => store.load(),
+    today: () => new Date().toISOString().slice(0, 10),
   });
 
   // Listeners are registered right away (not after an await): the browser can
@@ -117,6 +133,12 @@ export default defineBackground(() => {
     if (cancel.ok) {
       // The job ends with its own "cancelled" state, which the popup reads from storage.
       return coordinator.cancel(cancel.value).then(() => ok(undefined));
+    }
+
+    const captureCommand = parseCaptureCommandMessage(message);
+    if (captureCommand.ok) {
+      // Only the popup (or a test page of the extension) asks; it names the tab it is shown over.
+      return runCaptureCommand(captureCommand.value);
     }
 
     const download = parseDownloadMediaMessage(message);
@@ -201,6 +223,43 @@ export default defineBackground(() => {
     } catch (error) {
       console.error('StreamDraft: the page did not answer the menu click', error);
     }
+  }
+
+  function runCaptureCommand(command: CaptureCommand): Promise<Result<unknown>> {
+    switch (command.kind) {
+      case 'arm':
+        return captures.arm(command.tabId);
+      case 'status':
+        return captures.status(command.tabId);
+      case 'save':
+        return captures.save(command.tabId, command.soundOnly);
+      case 'discard':
+        return captures.discard(command.tabId);
+    }
+  }
+
+  /** The browser calls the capture needs to mark a tab, reload it and talk to its capture script. */
+  function createPagesApi(): PagesApi {
+    return {
+      setArmMark: async (tabId) => {
+        // Runs inside the page, so it cannot use the extension's code: it writes the mark of arm-marker.ts.
+        const results = await browser.scripting.executeScript({
+          target: { tabId },
+          func: (key: string, value: string): boolean => {
+            try {
+              window.sessionStorage.setItem(key, value);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          args: [ARM_KEY, String(Date.now())],
+        });
+        return results[0]?.result === true;
+      },
+      reload: (tabId) => browser.tabs.reload(tabId),
+      send: (tabId, message) => browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    };
   }
 
   /** The Chrome calls that open, find and close the engine's offscreen document. */

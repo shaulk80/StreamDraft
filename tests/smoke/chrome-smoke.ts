@@ -29,6 +29,7 @@ import {
   pageDataScript,
   SETTING_SETTLE_MS,
 } from './page-data.ts';
+import { checkPlayerCapture, type CaptureSmokeBrowser } from './player-capture.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
@@ -226,6 +227,24 @@ async function checkStreamParts(browser: CdpConnection, extensionId: string, pag
     return;
   }
   console.log('Chrome runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
+}
+
+// The player capture end to end (tests/smoke/player-capture.ts): the test page's player is recorded in the
+// page and joined into the same kind of file as a stream, in the offscreen document.
+async function checkPlayerCaptureRun(browser: CdpConnection, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const options = await Page.open(browser, `chrome-extension://${extensionId}/options.html`);
+  let testPage: Page | undefined;
+
+  const target: CaptureSmokeBrowser = {
+    api: 'chrome',
+    openTestPage: async (url) => {
+      testPage = await Page.open(browser, url);
+    },
+    inTestPage: async (expression) => testPage?.evaluate<unknown>(expression),
+    inExtension: (script) => options.evaluate<string>(script),
+    sleep,
+  };
+  await checkPlayerCapture(target, pageUrl, downloadDir, problems, 'Chrome runtime: player capture');
 }
 
 // The player capture is a switch: off, no page gets the MAIN-world script; on for a site, that site's page
@@ -635,6 +654,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkStreams(browser, extensionId, server.url);
     await checkStreamParts(browser, extensionId, server.url);
     await checkPageData(browser, extensionId, server.url);
+    await checkPlayerCaptureRun(browser, extensionId, server.url, downloadDir);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkSilentStream(browser, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);

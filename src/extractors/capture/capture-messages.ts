@@ -48,8 +48,11 @@ export function parseCapturePost(data: unknown): Result<CaptureEvent> {
       if (!isCount(bufferId) || !ArrayBuffer.isView(bytes)) {
         return fail('Malformed append message.');
       }
-      // Read through a view of our own: the data was cloned from the page's world.
-      return ok({ kind: 'append', bufferId, bytes: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength), durationSeconds: typeof durationSeconds === 'number' ? durationSeconds : undefined });
+      // A copy in our own memory: the data comes from the page's world, and Firefox does not let a content
+      // script call methods such as `slice` on it ("Permission denied to access property constructor").
+      const own = new Uint8Array(bytes.byteLength);
+      own.set(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
+      return ok({ kind: 'append', bufferId, bytes: own, durationSeconds: typeof durationSeconds === 'number' ? durationSeconds : undefined });
     }
     case 'eme':
       return typeof fields['api'] === 'string' ? ok({ kind: 'eme', api: fields['api'] }) : fail('Malformed encrypted media message.');

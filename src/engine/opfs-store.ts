@@ -3,7 +3,7 @@ import { OpfsOutputSink } from './opfs-sink.ts';
 import type { SegmentStore } from './segment-store.ts';
 
 /** What `write` takes: bytes at the cursor, or bytes at a position (which moves the cursor there). */
-export type WriteChunk = Uint8Array | { type: 'write'; position: number; data: Uint8Array };
+export type WriteChunk = Uint8Array | Blob | { type: 'write'; position: number; data: Uint8Array };
 
 export interface WritableLike {
   write(data: WriteChunk): Promise<void>;

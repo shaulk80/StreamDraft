@@ -29,6 +29,7 @@ import {
   pageDataScript,
   SETTING_SETTLE_MS,
 } from './page-data.ts';
+import { checkPlayerCapture, type CaptureSmokeBrowser } from './player-capture.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
@@ -369,6 +370,37 @@ async function checkPageData(driver: firefox.Driver, pageUrl: string): Promise<v
     return;
   }
   console.log("Firefox runtime: page data: off by default; switched on for the site, the MAIN-world script read the page's own variable and the background holds it; switched off again, nothing arrives");
+}
+
+// The player capture end to end (tests/smoke/player-capture.ts): the test page's player is recorded in the
+// page and joined into the same kind of file as a stream. Pages are told apart by their window handle.
+async function checkPlayerCaptureRun(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const extensionHandle = await driver.getWindowHandle();
+  let testHandle = extensionHandle;
+
+  const browser: CaptureSmokeBrowser = {
+    api: 'browser',
+    openTestPage: async (url) => {
+      await openInNewTab(driver, url);
+      testHandle = await driver.getWindowHandle();
+    },
+    inTestPage: async (expression) => {
+      try {
+        await driver.switchTo().window(testHandle);
+        return await driver.executeScript<unknown>(`return ${expression};`);
+      } catch {
+        // The page is loading: the caller asks again.
+        return undefined;
+      }
+    },
+    inExtension: async (script) => {
+      await driver.switchTo().window(extensionHandle);
+      return driver.executeAsyncScript<string>(`const done = arguments[arguments.length - 1]; (${script}).then(done);`);
+    },
+    sleep: (milliseconds) => driver.sleep(milliseconds),
+  };
+  await checkPlayerCapture(browser, pageUrl, downloadDir, problems, 'Firefox runtime: player capture');
 }
 
 /** The open popup, for reading the text of its cards (nothing to press, nothing to reload). */
@@ -790,6 +822,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkStreams(driver, testPage.url);
       await checkStreamParts(driver, testPage.url);
       await checkPageData(driver, testPage.url);
+      await checkPlayerCaptureRun(driver, testPage.url, downloadDir);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
       await checkSilentStream(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);

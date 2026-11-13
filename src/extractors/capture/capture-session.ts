@@ -26,6 +26,11 @@ export class CaptureSession {
     return this.queue;
   }
 
+  /** Resolves once every event handed to `handle` so far has been handled (and its parts stored). */
+  settled(): Promise<void> {
+    return this.queue;
+  }
+
   snapshot(): CaptureSnapshot {
     const buffers = this.currentBuffers();
     const missing = this.missingRanges(buffers);
