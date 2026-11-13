@@ -19,6 +19,7 @@ import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
 import { StreamResolver } from '../src/detect/stream-resolver.ts';
+import { ExtractorRegistry } from '../src/extractors/extractor-registry.ts';
 import { fail, ok } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
@@ -32,6 +33,8 @@ export default defineBackground(() => {
   );
 
   const registry = new MediaRegistry(browser.storage.session);
+  // Site extractors go in the list when there are any (M4); every other page gets the generic one.
+  const extractors = new ExtractorRegistry();
   const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
 
   // Streams are downloaded by the engine: in this page on Firefox, in an offscreen
@@ -83,7 +86,7 @@ export default defineBackground(() => {
         return undefined;
       }
       // Answered after the videos are stored: a page that rescans on request waits for it.
-      return addPageCandidates(registry, sender.tab.id, found.value).then((count) => ok(count));
+      return addPageCandidates(registry, extractors, sender.tab.id, sender.tab.url, found.value).then((count) => ok(count));
     }
 
     const resolve = parseResolveStreamsMessage(message);
@@ -129,7 +132,7 @@ export default defineBackground(() => {
   function registerDetection(): void {
     // A stream's manifest is read as soon as it is found: it names the stream's own
     // files (segments, rendition playlists), which must not be listed as videos.
-    const observer = new NetworkObserver({ registry, lookupTab, onStreamFound: (tabId) => void resolver.resolveTab(tabId) });
+    const observer = new NetworkObserver({ registry, extractors, lookupTab, onStreamFound: (tabId) => void resolver.resolveTab(tabId) });
 
     // A new page in a tab starts with an empty list. Seen before the response
     // of the new page, so a video opened as the page itself is not lost.

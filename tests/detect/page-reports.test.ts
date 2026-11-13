@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { MediaItem } from '../../src/core/media.ts';
 import { fail, ok } from '../../src/core/result.ts';
+import { ExtractorRegistry } from '../../src/extractors/extractor-registry.ts';
 import { addPageCandidates } from '../../src/detect/page-reports.ts';
 
 function createRegistry(failing = false) {
@@ -19,7 +20,7 @@ describe('addPageCandidates', () => {
   test('videos are added to the tab, anything else is dropped', async () => {
     const { registry, add, added } = createRegistry();
 
-    const accepted = await addPageCandidates(registry, 5, [
+    const accepted = await addPageCandidates(registry, new ExtractorRegistry(), 5, undefined, [
       { url: 'https://example.com/a.mp4', pageUrl: 'https://example.com/', pageTitle: 'Page' },
       { url: 'blob:https://example.com/1234' },
       { url: 'https://example.com/readme.html', contentType: 'text/html' },
@@ -34,6 +35,6 @@ describe('addPageCandidates', () => {
   test('items the registry could not keep are not counted', async () => {
     const { registry } = createRegistry(true);
 
-    expect(await addPageCandidates(registry, 5, [{ url: 'https://example.com/a.mp4' }])).toBe(0);
+    expect(await addPageCandidates(registry, new ExtractorRegistry(), 5, undefined, [{ url: 'https://example.com/a.mp4' }])).toBe(0);
   });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { MediaItem } from '../../src/core/media.ts';
 import { ok } from '../../src/core/result.ts';
+import { ExtractorRegistry } from '../../src/extractors/extractor-registry.ts';
 import {
   NetworkObserver,
   type ObserverDeps,
@@ -21,7 +22,7 @@ function createObserver(tab: TabInfo | null = { url: 'https://example.com/watch'
     clear: vi.fn(() => Promise.resolve(ok(undefined))),
   };
   const lookupTab = vi.fn(() => Promise.resolve(tab ?? undefined));
-  const deps: ObserverDeps = { registry, lookupTab, onStreamFound };
+  const deps: ObserverDeps = { registry, extractors: new ExtractorRegistry(), lookupTab, onStreamFound };
   return { observer: new NetworkObserver(deps), registry, lookupTab, items, onStreamFound };
 }
 

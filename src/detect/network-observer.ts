@@ -1,5 +1,5 @@
 import type { MediaCandidate, MediaItem } from '../core/media.ts';
-import type { Result } from '../core/result.ts';
+import type { ExtractorRegistry } from '../extractors/extractor-registry.ts';
 import { classifyCandidate } from './classify.ts';
 import { headerValue, totalSizeOf, type HeaderLike } from './headers.ts';
 import type { MediaRegistry } from './registry.ts';
@@ -28,6 +28,7 @@ export interface TabInfo {
 
 export interface ObserverDeps {
   registry: Pick<MediaRegistry, 'add' | 'list' | 'clear'>;
+  extractors: Pick<ExtractorRegistry, 'forPage'>;
   /** Undefined when the tab is gone or cannot be read. */
   lookupTab(tabId: number): Promise<TabInfo | undefined>;
   /** A stream (HLS or DASH) was seen on the tab for the first time: time to read its manifest. */
@@ -88,11 +89,11 @@ export class NetworkObserver {
     item: MediaItem,
   ): Promise<MediaItem> {
     const tab = await this.deps.lookupTab(details.tabId);
-    const detailed: Result<MediaItem> = classifyCandidate({
-      ...candidate,
-      pageUrl: tab?.url ?? details.documentUrl ?? details.initiator,
-      pageTitle: tab?.title,
-    });
-    return detailed.ok ? detailed.value : item;
+    const pageUrl = tab?.url ?? details.documentUrl ?? details.initiator;
+    const extracted = await this.deps.extractors
+      .forPage(pageUrl)
+      .extract({ pageUrl, pageTitle: tab?.title, candidates: [candidate] });
+    const [detailed] = extracted.ok ? extracted.value : [];
+    return detailed ?? item;
   }
 }
