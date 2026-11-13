@@ -46,7 +46,13 @@ async function start(): Promise<void> {
   writeSettings(controls, await store.load());
 
   const form = document.getElementById('settings-form');
-  form?.addEventListener('input', () => void saveFromForm(store, controls));
+  // The site list is saved when the user leaves it, not on every key: half a name is not a site.
+  form?.addEventListener('input', (event) => {
+    if (event.target !== controls.playerCaptureSites) {
+      void saveFromForm(store, controls);
+    }
+  });
+  controls.playerCaptureSites.addEventListener('change', () => void saveFromForm(store, controls));
   form?.addEventListener('submit', (event) => event.preventDefault());
 
   // A change made in another options tab shows up here. While this tab has

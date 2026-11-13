@@ -19,6 +19,17 @@ import {
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
+import {
+  captureSettingScript,
+  clearPageDataScript,
+  hasPageData,
+  MAIN_WORLD_PAGE,
+  NOTHING_HAPPENS_MS,
+  pageDataProblem,
+  pageDataScript,
+  SETTING_SETTLE_MS,
+} from './page-data.ts';
+import { checkPlayerCapture, type CaptureSmokeBrowser } from './player-capture.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
@@ -318,6 +329,78 @@ async function checkStreamParts(driver: firefox.Driver, pageUrl: string): Promis
     return;
   }
   console.log('Firefox runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
+}
+
+// The player capture is a switch: off, no page gets the MAIN-world script; on for a site, that site's page
+// hands a variable of its own scripts to the background; off again, nothing more arrives.
+async function checkPageData(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  const options = `moz-extension://${FIXED_UUID}/options.html`;
+  const run = (script: string): Promise<string> =>
+    driver.executeAsyncScript<string>(`const done = arguments[arguments.length - 1]; (${script}).then(done);`);
+  const stored = async (): Promise<string> => run(pageDataScript('browser'));
+
+  await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await driver.sleep(NOTHING_HAPPENS_MS);
+  await openInNewTab(driver, options);
+  if (hasPageData(await stored())) {
+    problems.push('firefox runtime: page data: the page was read although the player capture is off (the default)');
+    return;
+  }
+
+  await run(captureSettingScript('browser', true, ['127.0.0.1']));
+  await driver.sleep(SETTING_SETTLE_MS);
+  await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await openInNewTab(driver, options);
+  try {
+    await driver.wait(async () => pageDataProblem(await stored()) === undefined, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: page data: ${String(pageDataProblem(await stored()))}`);
+    return;
+  }
+
+  await run(captureSettingScript('browser', false, ['127.0.0.1']));
+  await run(clearPageDataScript('browser'));
+  await driver.sleep(SETTING_SETTLE_MS);
+  await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await driver.sleep(NOTHING_HAPPENS_MS);
+  await openInNewTab(driver, options);
+  if (hasPageData(await stored())) {
+    problems.push('firefox runtime: page data: the page was read after the player capture was switched off again');
+    return;
+  }
+  console.log("Firefox runtime: page data: off by default; switched on for the site, the MAIN-world script read the page's own variable and the background holds it; switched off again, nothing arrives");
+}
+
+// The player capture end to end (tests/smoke/player-capture.ts): the test page's player is recorded in the
+// page and joined into the same kind of file as a stream. Pages are told apart by their window handle.
+async function checkPlayerCaptureRun(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const extensionHandle = await driver.getWindowHandle();
+  let testHandle = extensionHandle;
+
+  const browser: CaptureSmokeBrowser = {
+    api: 'browser',
+    openTestPage: async (url) => {
+      await openInNewTab(driver, url);
+      testHandle = await driver.getWindowHandle();
+    },
+    inTestPage: async (expression) => {
+      try {
+        await driver.switchTo().window(testHandle);
+        return await driver.executeScript<unknown>(`return ${expression};`);
+      } catch {
+        // The page is loading: the caller asks again.
+        return undefined;
+      }
+    },
+    inExtension: async (script) => {
+      await driver.switchTo().window(extensionHandle);
+      return driver.executeAsyncScript<string>(`const done = arguments[arguments.length - 1]; (${script}).then(done);`);
+    },
+    sleep: (milliseconds) => driver.sleep(milliseconds),
+  };
+  await checkPlayerCapture(browser, pageUrl, downloadDir, problems, 'Firefox runtime: player capture');
 }
 
 /** The open popup, for reading the text of its cards (nothing to press, nothing to reload). */
@@ -738,6 +821,8 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkDetection(driver, testPage.url, downloadDir);
       await checkStreams(driver, testPage.url);
       await checkStreamParts(driver, testPage.url);
+      await checkPageData(driver, testPage.url);
+      await checkPlayerCaptureRun(driver, testPage.url, downloadDir);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
       await checkSilentStream(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);

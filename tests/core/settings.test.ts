@@ -34,7 +34,24 @@ describe('normalizeSettings', () => {
       contextMenu: true,
       filenameTemplate: '{site} - {title}',
       defaultQuality: '480p',
+      playerCapture: false,
+      playerCaptureSites: ['youtube.com'],
     });
+  });
+
+  test.each([
+    ['a list is cleaned: bad entries dropped, names lower-cased, repeats removed', ['Example.COM', 'not a site', 5, 'example.com', '*.other.org'], ['example.com', 'other.org']],
+    ['an empty list stays empty (everything is switched off)', [], []],
+    ['a missing list gives the default list', undefined, DEFAULT_SETTINGS.playerCaptureSites],
+    ['a list of the wrong type gives the default list', 'youtube.com', DEFAULT_SETTINGS.playerCaptureSites],
+  ])('player capture sites: %s', (_name, raw, expected) => {
+    expect(normalizeSettings({ playerCaptureSites: raw }).playerCaptureSites).toEqual(expected);
+  });
+
+  test('the player capture is off unless a stored setting says it is on', () => {
+    expect(normalizeSettings({}).playerCapture).toBe(false);
+    expect(normalizeSettings({ playerCapture: true }).playerCapture).toBe(true);
+    expect(normalizeSettings({ playerCapture: 'yes' }).playerCapture).toBe(false);
   });
 });
 
@@ -67,6 +84,14 @@ describe('validateSettings', () => {
 
   test('rejects a bad template', () => {
     expect(validateSettings({ ...DEFAULT_SETTINGS, filenameTemplate: '{x}' }).ok).toBe(false);
+  });
+
+  test.each([
+    ['a site that is an address with a path', ['https://youtube.com/watch']],
+    ['a site with spaces inside', ['you tube']],
+    ['too many sites', Array.from({ length: 51 }, (_, index) => `site${index}.example`)],
+  ])('rejects %s', (_name, playerCaptureSites) => {
+    expect(validateSettings({ ...DEFAULT_SETTINGS, playerCaptureSites }).ok).toBe(false);
   });
 });
 

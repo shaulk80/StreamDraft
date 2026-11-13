@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "StreamDraft player check (spike)",
+  "version": "0.0.1",
+  "description": "Only watches how a page's player uses the media pipeline. Reads nothing out, changes nothing unless you switch the codec hiding on.",
+  "browser_specific_settings": { "gecko": { "id": "player-check@example.invalid", "strict_min_version": "140.0" } },
+  "content_scripts": [
+    {
+      "matches": ["*://*.youtube.com/*", "http://127.0.0.1/*"],
+      "js": ["hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": true
+    }
+  ]
+}

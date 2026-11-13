@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>mse spike</title>
+<script>
+  // Runs before anything else of the page: was the extension's hook here first?
+  window.__before = { hookPresent: typeof window.__hook !== 'undefined', scriptsAtHook: window.__hook ? window.__hook.scriptsAtStart : null };
+</script>
+<video id="v" muted playsinline width="320"></video>
+<script>
+  const params = new URLSearchParams(location.search);
+  const video = document.getElementById('v');
+  const result = (window.__result = { before: window.__before, done: false });
+  const VIDEO_SEGMENTS = 8;
+
+  const fetchBytes = async (name) => new Uint8Array(await (await fetch('/media/' + name)).arrayBuffer());
+  const once = (target, event) => new Promise((resolve) => target.addEventListener(event, resolve, { once: true }));
+
+  async function appendAll(buffer, prefix, ext) {
+    for (let index = 0; index <= VIDEO_SEGMENTS; index += 1) {
+      buffer.appendBuffer(await fetchBytes(prefix + index + ext));
+      await once(buffer, 'updateend');
+    }
+  }
+
+  async function run() {
+    const probes = [
+      'video/webm; codecs="vp9"',
+      'video/mp4; codecs="av01.0.05M.08"',
+      'video/mp4; codecs="avc1.64001e"',
+      'audio/webm; codecs="opus"',
+      'audio/mp4; codecs="mp4a.40.5"',
+    ];
+    result.isTypeSupported = Object.fromEntries(probes.map((type) => [type, MediaSource.isTypeSupported(type)]));
+    result.canPlayType = Object.fromEntries(probes.map((type) => [type, video.canPlayType(type)]));
+    result.decodingInfo = {};
+    for (const type of ['video/webm; codecs="vp9"', 'video/mp4; codecs="avc1.64001e"']) {
+      const info = await navigator.mediaCapabilities.decodingInfo({ type: 'media-source', video: { contentType: type, width: 640, height: 360, bitrate: 1000000, framerate: 30 } });
+      result.decodingInfo[type] = info.supported;
+    }
+    // What a player that prefers VP9 would take.
+    result.wouldPick = probes.find((type) => type.startsWith('video/') && MediaSource.isTypeSupported(type));
+
+    if (params.get('eme') === '1') {
+      try {
+        const access = await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [
+          { initDataTypes: ['cenc'], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.64001e"' }] },
+        ]);
+        await video.setMediaKeys(await access.createMediaKeys());
+        result.eme = 'set';
+      } catch (error) {
+        result.eme = 'error: ' + error;
+      }
+    }
+
+    const source = new MediaSource();
+    video.src = URL.createObjectURL(source);
+    await once(source, 'sourceopen');
+    const videoBuffer = source.addSourceBuffer('video/mp4; codecs="avc1.64001e"');
+    const audioBuffer = source.addSourceBuffer('audio/mp4; codecs="mp4a.40.5"');
+    window.__buffers = [videoBuffer, audioBuffer];
+    await Promise.all([appendAll(videoBuffer, 'v', '.m4v'), appendAll(audioBuffer, 'a', '.m4a')]);
+    source.endOfStream();
+    result.duration = source.duration;
+    result.buffered = [...Array(video.buffered.length).keys()].map((i) => [video.buffered.start(i), video.buffered.end(i)]);
+
+    video.playbackRate = 8;
+    await video.play();
+    await Promise.race([once(video, 'ended'), new Promise((resolve) => setTimeout(resolve, 15000))]);
+    result.playedTo = video.currentTime;
+    result.ended = video.ended;
+    result.frames = video.getVideoPlaybackQuality?.().totalVideoFrames;
+  }
+
+  // (c) the buffer is emptied from outside; a player that notices appends again.
+  window.refill = async () => {
+    const appendsBefore = window.__hook.appends;
+    await window.__hookReset();
+    const bufferedAfterRemove = video.buffered.length;
+    video.currentTime = 0;
+    const [videoBuffer, audioBuffer] = window.__buffers;
+    await Promise.all([appendAll(videoBuffer, 'v', '.m4v'), appendAll(audioBuffer, 'a', '.m4a')]);
+    return { bufferedAfterRemove, appendsAdded: window.__hook.appends - appendsBefore, bufferedAfterRefill: video.buffered.length };
+  };
+  run()
+    .catch((error) => {
+      result.error = String(error);
+    })
+    .finally(() => {
+      result.done = true;
+    });
+</script>

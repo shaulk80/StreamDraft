@@ -1,6 +1,7 @@
 import { renderFilename, type Quality } from './settings.ts';
 
-export type MediaKind = 'direct' | 'hls' | 'dash';
+/** `capture` is a video recorded from the page's player (decision 0009), not found by its address. */
+export type MediaKind = 'direct' | 'hls' | 'dash' | 'capture';
 
 /**
  * One rendition of a stream (an HLS variant, a DASH representation), as the
@@ -79,7 +80,8 @@ export type StreamDetails = Pick<
  * `manifestError`): it has nothing to offer for download.
  */
 export function needsManifest(item: MediaItem): boolean {
-  return item.kind !== 'direct' && !item.protected && item.qualities.length === 0;
+  const isStream = item.kind === 'hls' || item.kind === 'dash';
+  return isStream && !item.protected && item.qualities.length === 0;
 }
 
 /** What the network observer or the page scanner knows about one possible video. */

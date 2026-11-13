@@ -33,3 +33,7 @@ Manifests only (small text files), from public test streams:
 | `apple-fmp4-master.m3u8` | Apple advanced fMP4 example | Master playlist with fMP4 renditions, separate audio groups and subtitles. |
 | `akamai-bbb-30fps-segmented.mpd` | Akamai Big Buck Bunny | DASH `SegmentTemplate` with separate video and audio sets. |
 | `dashif-netflix-ondemand.mpd` | DASH-IF test case 1a | DASH on-demand: one file per rendition, `SegmentBase` with byte ranges. |
+
+## `mse/` (M4 task 6, decision 0010)
+
+Spike of the player capture: a throwaway extension (`ext/`, plain JavaScript) with a page-world hook registered at run time, a toy MSE player (`mse.html`) and a runner (`run.ts <chrome|firefox> <MiB>`; environment: `MEDIA_DIR` for the downloaded Big Buck Bunny segments `v0..v8.m4v` and `a0..a8.m4a` of `https://dash.akamaized.net/akamai/bbb_30fps/` (`bbb_30fps_640x360_1000k`, `bbb_a64k`), `FIREFOX_BIN`, `STAGE` = `full`, `nowrite`, `blob`, `relay` or `opfs`, `PACE_MS`, `CHUNK_KIB`, `CHECK=1` to try `youtube-check/` instead). `youtube-check/` is the small extension the owner loads for the check on real sites. The runner imports `tests/smoke/cdp.ts` and `memory-sampler.ts`, so it runs from this place.

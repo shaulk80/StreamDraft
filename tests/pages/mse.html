@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>StreamDraft player capture test page</title>
+</head>
+<body>
+  <h1>Player capture test page</h1>
+  <p>
+    A small player that feeds real H.264 and AAC segments (12 seconds of Big Buck Bunny, see mse/README.md) to
+    the browser through Media Source Extensions, the way a streaming site does. Nothing here is a stream the
+    extension can fetch on its own: the video exists only inside the page's player. Options in the address:
+    <code>?switch=1</code> changes the picture's quality in the middle, <code>?eme=1</code> asks for encrypted media
+    like a protected stream.
+  </p>
+  <video id="player" muted playsinline width="320" height="180"></video>
+  <p id="status">starting</p>
+  <script>
+    // The player picks the first picture type the browser says it can play, the way real players do. If the
+    // extension has hidden VP9 and AV1, that is H.264 in MP4, which is what these segments are.
+    const params = new URLSearchParams(location.search);
+    // `loadId` tells this load of the page from an earlier one, for a test that reloads it.
+    const result = (window.__result = { done: false, error: null, picked: null, loadId: String(Math.random()) });
+    const status = document.getElementById('status');
+
+    const PREFERENCE = ['video/webm; codecs="vp9"', 'video/mp4; codecs="av01.0.05M.08"', 'video/mp4; codecs="avc1.64000d"'];
+    const VIDEO_TYPES = { low: 'video/mp4; codecs="avc1.64000d"', high: 'video/mp4; codecs="avc1.640015"' };
+    const AUDIO_TYPE = 'audio/mp4; codecs="mp4a.40.5"';
+    const LENGTH_SECONDS = 12;
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const once = (target, event) => new Promise((resolve) => target.addEventListener(event, resolve, { once: true }));
+
+    async function fetchBytes(path) {
+      const response = await fetch('/mse/' + path);
+      if (!response.ok) {
+        throw new Error('no ' + path);
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    }
+
+    function append(buffer, bytes) {
+      return new Promise((resolve, reject) => {
+        buffer.addEventListener('updateend', resolve, { once: true });
+        buffer.addEventListener('error', () => reject(new Error('the browser refused a segment')), { once: true });
+        buffer.appendBuffer(bytes);
+      });
+    }
+
+    /** Small appends, like a real player's network reads: each file in pieces of 12 KB. */
+    async function appendFile(buffer, path) {
+      const bytes = await fetchBytes(path);
+      const PIECE = 12 * 1024;
+      for (let at = 0; at < bytes.length; at += PIECE) {
+        await append(buffer, bytes.subarray(at, at + PIECE));
+      }
+    }
+
+    async function feed(buffer, paths) {
+      for (const path of paths) {
+        await appendFile(buffer, path);
+        await sleep(10);
+      }
+    }
+
+    async function askForEncryptedMedia(video) {
+      try {
+        const access = await navigator.requestMediaKeySystemAccess('org.w3.clearkey', [
+          { initDataTypes: ['cenc'], videoCapabilities: [{ contentType: VIDEO_TYPES.low }] },
+        ]);
+        await video.setMediaKeys(await access.createMediaKeys());
+        result.eme = 'set';
+      } catch (error) {
+        result.eme = 'error: ' + error;
+      }
+    }
+
+    async function run() {
+      const video = document.getElementById('player');
+      result.isTypeSupported = Object.fromEntries(PREFERENCE.map((type) => [type, MediaSource.isTypeSupported(type)]));
+      result.picked = PREFERENCE.find((type) => MediaSource.isTypeSupported(type)) ?? null;
+      if (result.picked !== VIDEO_TYPES.low) {
+        // A browser that plays VP9 gets nothing from this page: it only has H.264.
+        result.done = true;
+        status.textContent = 'the player wanted ' + result.picked + ' and the page has no such stream';
+        return;
+      }
+
+      if (params.get('eme') === '1') {
+        await askForEncryptedMedia(video);
+      }
+
+      const source = new MediaSource();
+      video.src = URL.createObjectURL(source);
+      await once(source, 'sourceopen');
+      source.duration = LENGTH_SECONDS;
+      const pictureBuffer = source.addSourceBuffer(VIDEO_TYPES.low);
+      const soundBuffer = source.addSourceBuffer(AUDIO_TYPE);
+
+      const picture = params.get('switch') === '1'
+        ? ['low/init.mp4', 'low/1.m4s', 'high/init.mp4', 'high/2.m4s', 'high/3.m4s']
+        : ['low/init.mp4', 'low/1.m4s', 'low/2.m4s', 'low/3.m4s'];
+      const sound = ['audio/init.mp4', 'audio/1.m4s', 'audio/2.m4s', 'audio/3.m4s'];
+      await Promise.all([feed(pictureBuffer, picture), feed(soundBuffer, sound)]);
+
+      source.endOfStream();
+      result.duration = source.duration;
+      result.buffered = video.buffered.length > 0 ? [video.buffered.start(0), video.buffered.end(0)] : [];
+      result.done = true;
+      status.textContent = 'all segments appended';
+    }
+
+    run().catch((error) => {
+      result.error = String(error);
+      result.done = true;
+      status.textContent = 'failed: ' + error;
+    });
+  </script>
+</body>
+</html>

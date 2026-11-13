@@ -17,6 +17,8 @@ export default defineConfig({
       'contextMenus',
       'webRequest',
       'downloads',
+      // Registers the player capture script while the setting is on (decision 0009).
+      'scripting',
       // Chrome runs the stream engine in an offscreen document; Firefox does not know the permission.
       ...(browser === 'firefox' ? [] : ['offscreen']),
     ],

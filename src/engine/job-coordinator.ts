@@ -3,6 +3,7 @@ import { ok, type Result } from '../core/result.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
 import type { EngineEvent, EngineHost, FinishedFile } from './engine-types.ts';
 import { JobProgressReporter, type JobAreaLike, type JobIdentity, type JobState, type JobStateStore, type JobStatus } from './job-state.ts';
+import type { RecordingInput } from './recording-input.ts';
 import type { JobProgress } from './segment-job.ts';
 
 /** The part of `browser.downloads` the hand-off uses. */
@@ -22,6 +23,8 @@ export interface StreamRequest {
   item: MediaItem;
   option: QualityOption;
   filename: string;
+  /** A captured recording to join (the item is then of kind `capture`) instead of a stream to fetch. */
+  recording?: RecordingInput;
 }
 
 export interface StartedStream {
@@ -100,7 +103,13 @@ export class JobCoordinator implements StreamStarter {
     const job = this.track(identity, ZERO_PROGRESS);
     await job.reporter.start(0);
 
-    const started = await this.deps.host.start({ jobId: identity.id, filename: request.filename, item: request.item, option: request.option });
+    const started = await this.deps.host.start({
+      jobId: identity.id,
+      filename: request.filename,
+      item: request.item,
+      option: request.option,
+      recording: request.recording,
+    });
     if (!started.ok) {
       await job.reporter.finish('failed', job.last, started.error);
       this.tracked.delete(identity.id);

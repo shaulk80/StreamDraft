@@ -70,6 +70,7 @@ async function planSources(item: MediaItem, variant: StreamVariant, fetchText: F
     case 'dash':
       return planDash(item.url, variant, fetchText, soundOnly);
     case 'direct':
+    case 'capture':
       return fail('This is not a stream.');
   }
 }

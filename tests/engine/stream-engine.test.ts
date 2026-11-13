@@ -8,6 +8,7 @@ import { StreamEngine, type StreamEngineDeps } from '../../src/engine/stream-eng
 import { readFlatMp4 } from './flat-mp4-reader.ts';
 import { MemoryJobFiles } from './memory-job-files.ts';
 import { initSegment, mediaSegment, type FixtureTrack } from './mp4-fixtures.ts';
+import { recordingFixture, type RecordingFixture } from './recording-fixtures.ts';
 
 const CDN = 'https://cdn.example.com/show';
 
@@ -232,5 +233,145 @@ describe('StreamEngine', () => {
 
     expect(revoked).toEqual([]);
     expect(recorder.signals).toEqual([{ kind: 'idle' }]);
+  });
+});
+
+describe('StreamEngine with a recording', () => {
+  const CAPTURE_ITEM: MediaItem = { ...ITEM, id: 'capture-1', url: 'https://www.example.com/watch', kind: 'capture' };
+  const BEST: QualityOption = { quality: 'best', label: 'Recording' };
+  const SOUND: QualityOption = { quality: 'audio', label: 'Audio only' };
+
+  function recordingJob(fixture: RecordingFixture, option: QualityOption = BEST): EngineJob {
+    return { jobId: 'job1', filename: 'Show.mp4', item: CAPTURE_ITEM, option, recording: fixture.recording };
+  }
+
+  /** The engine with nothing to read from but the recording's own addresses. */
+  function recordingSetup(fixture: RecordingFixture, overrides: Partial<StreamEngineDeps> = {}) {
+    const fetched: string[] = [];
+    const fetchSegment: FetchSegment = (request) => {
+      fetched.push(request.url);
+      const bytes = fixture.served.get(request.url);
+      return Promise.resolve(bytes === undefined ? fail('The server answered 404.') : ok(bytes));
+    };
+    return { ...setup({ fetchSegment, fetchText: () => Promise.resolve(fail('No manifest here.')), ...overrides }), fetched };
+  }
+
+  test.each<[string, boolean, number]>([
+    ['parts handed over as Files (Firefox)', false, 0],
+    ['parts reached by address (Chrome)', true, 6],
+  ])('joins the recorded video and audio into one file: %s', async (_name, viaUrl, reads) => {
+    const fixture = recordingFixture({ viaUrl });
+    const { engine, files, recorder, fetched } = recordingSetup(fixture);
+
+    expect(engine.start(recordingJob(fixture))).toEqual({ ok: true, value: undefined });
+    await recorder.waitFor('finished');
+
+    expect(recorder.finishedResult()?.ok).toBe(true);
+    const output = files.outputs.get('output')?.bytes() ?? new Uint8Array();
+    expect(readFlatMp4(output).tracks.map((track) => track.samples.length)).toEqual([4, 4]);
+    expect(fetched).toHaveLength(reads);
+  });
+
+  test('puts the segments in time order even when they were stored latest first', async () => {
+    const fixture = recordingFixture({ reversed: true });
+    const { engine, files, recorder } = recordingSetup(fixture);
+
+    engine.start(recordingJob(fixture));
+    await recorder.waitFor('finished');
+
+    const track = readFlatMp4(files.outputs.get('output')?.bytes() ?? new Uint8Array()).tracks[0];
+    expect(track?.samples.map((sample) => sample.dts)).toEqual([0, 500, 1000, 1500]);
+  });
+
+  test.each<[string, QualityOption, number, string]>([
+    ['a picture with sound', BEST, 2, 'video/mp4'],
+    ['sound only', SOUND, 1, 'audio/mp4'],
+  ])('offers %s with the type of its content', async (_name, option, trackCount, mimeType) => {
+    const fixture = recordingFixture();
+    const { engine, files, recorder, types } = recordingSetup(fixture);
+
+    engine.start(recordingJob(fixture, option));
+    await recorder.waitFor('finished');
+
+    expect(readFlatMp4(files.outputs.get('output')?.bytes() ?? new Uint8Array()).tracks).toHaveLength(trackCount);
+    expect(types).toEqual([mimeType]);
+  });
+
+  test('reports the number of segments first, then each joined one', async () => {
+    const fixture = recordingFixture();
+    const { engine, recorder } = recordingSetup(fixture);
+
+    engine.start(recordingJob(fixture));
+    await recorder.waitFor('finished');
+
+    const progress = recorder.signals.flatMap((signal) => (signal.kind === 'progress' ? [signal.progress] : []));
+    expect(progress[0]).toEqual({ doneSegments: 0, totalSegments: 4, bytes: 0 });
+    expect(progress.at(-1)).toMatchObject({ doneSegments: 4, totalSegments: 4 });
+  });
+
+  test('the page files are left alone: release removes only the job folder and its address', async () => {
+    const fixture = recordingFixture({ viaUrl: true });
+    const { engine, files, recorder, revoked } = recordingSetup(fixture);
+
+    engine.start(recordingJob(fixture));
+    await recorder.waitFor('finished');
+    await engine.release('job1');
+
+    expect(revoked).toHaveLength(1);
+    expect(files.cleared).toBe(true);
+    expect(files.segments.size).toBe(0);
+    expect(fixture.served.size).toBe(6);
+  });
+
+  test.each<[string, (fixture: RecordingFixture) => void, string]>([
+    ['a part the page removed', (fixture) => fixture.served.delete('blob:page/v-1'), 'The server answered 404'],
+    ['a part that is not a video', (fixture) => fixture.served.set('blob:page/v-1', new Uint8Array([1, 2, 3])), ''],
+  ])('ends with the reason and nothing is left behind: %s', async (_name, damage, messagePart) => {
+    const fixture = recordingFixture({ viaUrl: true });
+    damage(fixture);
+    const { engine, files, recorder } = recordingSetup(fixture);
+
+    engine.start(recordingJob(fixture));
+    await recorder.waitFor('idle');
+
+    const result = recorder.finishedResult();
+    expect(result?.ok).toBe(false);
+    expect(!result?.ok && result?.error).toContain(messagePart);
+    expect(engine.heldJobs()).toBe(0);
+    expect(files.outputs.size).toBe(0);
+  });
+
+  test('a recording with no segments is refused before any file is opened', async () => {
+    const fixture = recordingFixture();
+    const opened = vi.fn(() => Promise.resolve(fail('unused')));
+    const { engine, recorder } = recordingSetup(fixture, { openFiles: opened });
+
+    engine.start({ ...recordingJob(fixture), recording: { buffers: [] } });
+    await recorder.waitFor('idle');
+
+    expect(recorder.finishedResult()).toEqual({ ok: false, error: 'The recording has no video to save.' });
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  test('cancel stops the joining and ends as cancelled', async () => {
+    const fixture = recordingFixture({ viaUrl: true });
+    // Like the real fetcher: never answers until aborted, and notices a signal that is aborted already.
+    const hanging: FetchSegment = (_request, signal) =>
+      new Promise((resolve) => {
+        if (signal.aborted) {
+          resolve(fail(CANCELLED_MESSAGE));
+          return;
+        }
+        signal.addEventListener('abort', () => resolve(fail(CANCELLED_MESSAGE)), { once: true });
+      });
+    const { engine, files, recorder } = recordingSetup(fixture, { fetchSegment: hanging });
+
+    engine.start(recordingJob(fixture));
+    await recorder.waitFor('progress');
+    engine.cancel('job1');
+    await recorder.waitFor('idle');
+
+    expect(recorder.finishedResult()).toEqual({ ok: false, error: CANCELLED_MESSAGE });
+    expect(files.cleared).toBe(true);
   });
 });

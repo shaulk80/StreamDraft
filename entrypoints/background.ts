@@ -3,6 +3,7 @@ import {
   parseCancelJobMessage,
   parseDownloadMediaMessage,
   parseFoundMediaMessage,
+  parsePageDataMessage,
   parseResolveStreamsMessage,
   showTextMessage,
 } from '../src/core/messages.ts';
@@ -19,7 +20,15 @@ import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
 import { StreamResolver } from '../src/detect/stream-resolver.ts';
-import { fail, ok } from '../src/core/result.ts';
+import { CaptureRegistrar } from '../src/extractors/capture-registration.ts';
+import { checkPageData } from '../src/extractors/page-data.ts';
+import { PageDataStore } from '../src/extractors/page-data-store.ts';
+import { ExtractorRegistry } from '../src/extractors/extractor-registry.ts';
+import { ARM_KEY } from '../src/extractors/capture/arm-marker.ts';
+import { parseCaptureCommandMessage, type CaptureCommand } from '../src/extractors/capture/capture-commands.ts';
+import { BrowserCapturePages, type PagesApi } from '../src/extractors/capture/capture-pages.ts';
+import { CaptureService } from '../src/extractors/capture/capture-service.ts';
+import { fail, ok, type Result } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
 import { ContextMenuController, createMenusAdapter, MENU_ITEM_ID } from '../src/ui/context-menu.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
@@ -32,6 +41,14 @@ export default defineBackground(() => {
   );
 
   const registry = new MediaRegistry(browser.storage.session);
+  // Site extractors go in the list when there are any (M4); every other page gets the generic one.
+  const extractors = new ExtractorRegistry();
+  const pageData = new PageDataStore(browser.storage.session);
+  // The player capture script exists in the browser only while the setting is on, and only for the listed sites.
+  const capture = new CaptureRegistrar(browser.scripting, {
+    main: 'content-scripts/player-capture-main.js',
+    page: 'content-scripts/player-capture-page.js',
+  });
   const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
 
   // Streams are downloaded by the engine: in this page on Firefox, in an offscreen
@@ -64,6 +81,15 @@ export default defineBackground(() => {
     streams: coordinator,
   });
 
+  // The player capture's recording of a tab is kept by the page; this asks for it and starts the job that joins it.
+  const captures = new CaptureService({
+    pages: new BrowserCapturePages(createPagesApi()),
+    streams: coordinator,
+    tab: (tabId) => lookupTab(tabId),
+    loadSettings: () => store.load(),
+    today: () => new Date().toISOString().slice(0, 10),
+  });
+
   // Listeners are registered right away (not after an await): the browser can
   // stop this script at any time and wakes it for exactly these events.
   browser.runtime.onMessage.addListener((message: unknown, sender) => {
@@ -83,7 +109,18 @@ export default defineBackground(() => {
         return undefined;
       }
       // Answered after the videos are stored: a page that rescans on request waits for it.
-      return addPageCandidates(registry, sender.tab.id, found.value).then((count) => ok(count));
+      return addPageCandidates(registry, extractors, sender.tab.id, sender.tab.url, found.value).then((count) => ok(count));
+    }
+
+    const data = parsePageDataMessage(message);
+    if (data.ok) {
+      // The sender is a page's content script; the data belongs to its tab and is page content, not trusted.
+      const checked = checkPageData(data.value);
+      if (sender.tab?.id === undefined || !checked.ok) {
+        console.error(`StreamDraft: page data ignored: ${checked.ok ? 'no tab' : checked.error}`);
+        return undefined;
+      }
+      return pageData.save(sender.tab.id, checked.value);
     }
 
     const resolve = parseResolveStreamsMessage(message);
@@ -96,6 +133,12 @@ export default defineBackground(() => {
     if (cancel.ok) {
       // The job ends with its own "cancelled" state, which the popup reads from storage.
       return coordinator.cancel(cancel.value).then(() => ok(undefined));
+    }
+
+    const captureCommand = parseCaptureCommandMessage(message);
+    if (captureCommand.ok) {
+      // Only the popup (or a test page of the extension) asks; it names the tab it is shown over.
+      return runCaptureCommand(captureCommand.value);
     }
 
     const download = parseDownloadMediaMessage(message);
@@ -113,7 +156,10 @@ export default defineBackground(() => {
     return Promise.resolve(handleMessage(message, startedAt));
   });
 
-  store.onChange((settings) => void menu.apply(settings));
+  store.onChange((settings) => {
+    void menu.apply(settings);
+    void capture.apply(settings);
+  });
 
   // A finished stream is given to the browser's downloads; this says when the browser is done with it.
   browser.downloads.onChanged.addListener((change) => void coordinator.handleDownloadChange(change));
@@ -129,7 +175,7 @@ export default defineBackground(() => {
   function registerDetection(): void {
     // A stream's manifest is read as soon as it is found: it names the stream's own
     // files (segments, rendition playlists), which must not be listed as videos.
-    const observer = new NetworkObserver({ registry, lookupTab, onStreamFound: (tabId) => void resolver.resolveTab(tabId) });
+    const observer = new NetworkObserver({ registry, extractors, lookupTab, onStreamFound: (tabId) => void resolver.resolveTab(tabId) });
 
     // A new page in a tab starts with an empty list. Seen before the response
     // of the new page, so a video opened as the page itself is not lost.
@@ -179,6 +225,43 @@ export default defineBackground(() => {
     }
   }
 
+  function runCaptureCommand(command: CaptureCommand): Promise<Result<unknown>> {
+    switch (command.kind) {
+      case 'arm':
+        return captures.arm(command.tabId);
+      case 'status':
+        return captures.status(command.tabId);
+      case 'save':
+        return captures.save(command.tabId, command.soundOnly);
+      case 'discard':
+        return captures.discard(command.tabId);
+    }
+  }
+
+  /** The browser calls the capture needs to mark a tab, reload it and talk to its capture script. */
+  function createPagesApi(): PagesApi {
+    return {
+      setArmMark: async (tabId) => {
+        // Runs inside the page, so it cannot use the extension's code: it writes the mark of arm-marker.ts.
+        const results = await browser.scripting.executeScript({
+          target: { tabId },
+          func: (key: string, value: string): boolean => {
+            try {
+              window.sessionStorage.setItem(key, value);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          args: [ARM_KEY, String(Date.now())],
+        });
+        return results[0]?.result === true;
+      },
+      reload: (tabId) => browser.tabs.reload(tabId),
+      send: (tabId, message) => browser.tabs.sendMessage(tabId, message, { frameId: 0 }),
+    };
+  }
+
   /** The Chrome calls that open, find and close the engine's offscreen document. */
   function createOffscreenApi(): OffscreenApi {
     return {
@@ -197,5 +280,8 @@ export default defineBackground(() => {
   registerDetection();
 
   // The menu is rebuilt on every start, so it always matches the stored settings.
-  void store.load().then((settings) => menu.apply(settings));
+  void store.load().then((settings) => {
+    void capture.apply(settings);
+    return menu.apply(settings);
+  });
 });

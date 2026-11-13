@@ -1,5 +1,6 @@
 import { fail, ok, type Result } from '../core/result.ts';
 import type { EngineJob, EngineSignal, FinishedFile } from './engine-types.ts';
+import type { RecordingBuffer, RecordingInput, RecordingPart } from './recording-input.ts';
 import type { JobProgress } from './segment-job.ts';
 
 /** Background to offscreen document: a command for the engine. */
@@ -37,6 +38,46 @@ function isCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
+/** A part of a recording as a message carries it: a name and a `blob:` address (a `File` cannot travel). */
+function readPart(value: unknown): RecordingPart | undefined {
+  const part = asObject(value);
+  if (!isText(part?.name) || !isText(part.url)) {
+    return undefined;
+  }
+  const hasStart = part.startSeconds !== undefined;
+  if (hasStart && !isCount(part.startSeconds)) {
+    return undefined;
+  }
+  return { name: part.name, url: part.url, startSeconds: hasStart ? (part.startSeconds as number) : undefined };
+}
+
+function readBuffer(value: unknown): RecordingBuffer | undefined {
+  const buffer = asObject(value);
+  const init = readPart(buffer?.init);
+  const fragments = Array.isArray(buffer?.fragments) ? buffer.fragments.map(readPart) : [];
+  const kindKnown = buffer?.kind === 'video' || buffer?.kind === 'audio' || buffer?.kind === 'unknown';
+  if (!kindKnown || init === undefined || fragments.some((part) => part === undefined)) {
+    return undefined;
+  }
+  return { kind: buffer.kind as RecordingBuffer['kind'], init, fragments: fragments as RecordingPart[] };
+}
+
+function readRecording(value: unknown): RecordingInput | undefined {
+  const buffers = Array.isArray(asObject(value)?.buffers) ? (asObject(value)?.buffers as unknown[]).map(readBuffer) : [];
+  if (buffers.length === 0 || buffers.some((buffer) => buffer === undefined)) {
+    return undefined;
+  }
+  return { buffers: buffers as RecordingBuffer[] };
+}
+
+/** A stream job names the rendition to fetch; a capture job carries the recording to join. */
+function hasWhatToDownload(job: Fields, item: Fields, variant: Fields | undefined): boolean {
+  if (item.kind === 'capture') {
+    return readRecording(job.recording) !== undefined;
+  }
+  return (item.kind === 'hls' || item.kind === 'dash') && job.recording === undefined && isText(variant?.variantId);
+}
+
 /** The job of a start command, when it has the parts the engine reads. */
 function readJob(value: unknown): EngineJob | undefined {
   const job = asObject(value);
@@ -44,16 +85,22 @@ function readJob(value: unknown): EngineJob | undefined {
   const option = asObject(job?.option);
   const variant = asObject(option?.variant);
   const valid =
-    isText(job?.jobId) &&
+    job !== undefined &&
+    item !== undefined &&
+    isText(job.jobId) &&
     isText(job.filename) &&
-    isText(item?.id) &&
+    isText(item.id) &&
     isText(item.url) &&
     typeof item.title === 'string' &&
-    (item.kind === 'hls' || item.kind === 'dash') &&
     typeof item.protected === 'boolean' &&
     typeof option?.quality === 'string' &&
-    isText(variant?.variantId);
-  return valid ? (job as unknown as EngineJob) : undefined;
+    hasWhatToDownload(job, item, variant);
+  if (!valid) {
+    return undefined;
+  }
+
+  const recording = readRecording(job.recording);
+  return recording === undefined ? (job as unknown as EngineJob) : ({ ...job, recording } as unknown as EngineJob);
 }
 
 export function parseEngineCommandMessage(message: unknown): Result<EngineCommand> {

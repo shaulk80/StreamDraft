@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import path from 'node:path';
 import { generatedStreamFiles } from './generated-stream.ts';
@@ -18,7 +18,25 @@ const PAGES: Readonly<Record<string, string>> = {
   '/large.html': 'large.html',
   '/parts.html': 'parts.html',
   '/silent.html': 'silent.html',
+  '/main-world.html': 'main-world.html',
+  '/mse.html': 'mse.html',
 };
+
+// Real H.264 and AAC segments for /mse.html (tests/pages/mse, licence in its README), served by their path below /mse/.
+const MSE_FOLDERS = ['low', 'high', 'audio'];
+
+function mseFiles(): Map<string, Buffer> {
+  const files = new Map<string, Buffer>();
+  for (const folder of MSE_FOLDERS) {
+    const directory = path.join(import.meta.dirname, 'mse', folder);
+    for (const name of readdirSync(directory).sort()) {
+      files.set(`/mse/${folder}/${name}`, readFileSync(path.join(directory, name)));
+    }
+  }
+  return files;
+}
+
+const MSE = mseFiles();
 
 // Streams with real (tiny) segments, built once: the download tests fetch them.
 const GENERATED = generatedStreamFiles();
@@ -143,6 +161,13 @@ function handle(request: IncomingMessage, response: ServerResponse): void {
     return;
   }
 
+  const segment = MSE.get(pathname);
+  if (segment !== undefined) {
+    response.setHeader('Content-Type', 'video/mp4');
+    response.end(segment);
+    return;
+  }
+
   const media = MEDIA[pathname];
   if (media !== undefined) {
     sendMedia(request, response, media);
@@ -171,5 +196,5 @@ export function startTestPageServer(port: number): Promise<TestPageServer> {
 
 if (import.meta.main) {
   const started = await startTestPageServer(8123);
-  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream), ${started.url}large.html (a stream of 1.1 GB), ${started.url}parts.html (streams cut into .mp4 files, one protected), ${started.url}silent.html (a stream with no sound)  (Ctrl+C to stop)`);
+  console.log(`Test pages: ${started.url} (overlay), ${started.url}detect.html (detection), ${started.url}streams.html (HLS and DASH) and ${started.url}download.html (streams that download), ${started.url}jobs.html (a slow and a broken stream), ${started.url}large.html (a stream of 1.1 GB), ${started.url}parts.html (streams cut into .mp4 files, one protected), ${started.url}silent.html (a stream with no sound), ${started.url}main-world.html (a page variable read by the extension), ${started.url}mse.html (a player with real segments, for the player capture; ?switch=1 and ?eme=1)  (Ctrl+C to stop)`);
 }

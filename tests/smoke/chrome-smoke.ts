@@ -19,6 +19,17 @@ import {
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
+import {
+  captureSettingScript,
+  clearPageDataScript,
+  hasPageData,
+  MAIN_WORLD_PAGE,
+  NOTHING_HAPPENS_MS,
+  pageDataProblem,
+  pageDataScript,
+  SETTING_SETTLE_MS,
+} from './page-data.ts';
+import { checkPlayerCapture, type CaptureSmokeBrowser } from './player-capture.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
@@ -216,6 +227,58 @@ async function checkStreamParts(browser: CdpConnection, extensionId: string, pag
     return;
   }
   console.log('Chrome runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
+}
+
+// The player capture end to end (tests/smoke/player-capture.ts): the test page's player is recorded in the
+// page and joined into the same kind of file as a stream, in the offscreen document.
+async function checkPlayerCaptureRun(browser: CdpConnection, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const options = await Page.open(browser, `chrome-extension://${extensionId}/options.html`);
+  let testPage: Page | undefined;
+
+  const target: CaptureSmokeBrowser = {
+    api: 'chrome',
+    openTestPage: async (url) => {
+      testPage = await Page.open(browser, url);
+    },
+    inTestPage: async (expression) => testPage?.evaluate<unknown>(expression),
+    inExtension: (script) => options.evaluate<string>(script),
+    sleep,
+  };
+  await checkPlayerCapture(target, pageUrl, downloadDir, problems, 'Chrome runtime: player capture');
+}
+
+// The player capture is a switch: off, no page gets the MAIN-world script; on for a site, that site's page
+// hands a variable of its own scripts to the background; off again, nothing more arrives.
+async function checkPageData(browser: CdpConnection, extensionId: string, pageUrl: string): Promise<void> {
+  const options = await Page.open(browser, `chrome-extension://${extensionId}/options.html`);
+  const stored = async (): Promise<string | undefined> => options.evaluate<string>(pageDataScript('chrome'));
+
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await sleep(NOTHING_HAPPENS_MS);
+  if (hasPageData(await stored())) {
+    problems.push('chrome runtime: page data: the page was read although the player capture is off (the default)');
+    return;
+  }
+
+  await options.evaluate<string>(captureSettingScript('chrome', true, ['127.0.0.1']));
+  await sleep(SETTING_SETTLE_MS);
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  const read = await waitFor(async () => (pageDataProblem(await stored()) === undefined ? true : undefined));
+  if (!read) {
+    problems.push(`chrome runtime: page data: ${String(pageDataProblem(await stored()))}`);
+    return;
+  }
+
+  await options.evaluate<string>(captureSettingScript('chrome', false, ['127.0.0.1']));
+  await options.evaluate<string>(clearPageDataScript('chrome'));
+  await sleep(SETTING_SETTLE_MS);
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await sleep(NOTHING_HAPPENS_MS);
+  if (hasPageData(await stored())) {
+    problems.push('chrome runtime: page data: the page was read after the player capture was switched off again');
+    return;
+  }
+  console.log("Chrome runtime: page data: off by default; switched on for the site, the MAIN-world script read the page's own variable and the background holds it; switched off again, nothing arrives");
 }
 
 // The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on
@@ -590,6 +653,8 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
     await checkStreams(browser, extensionId, server.url);
     await checkStreamParts(browser, extensionId, server.url);
+    await checkPageData(browser, extensionId, server.url);
+    await checkPlayerCaptureRun(browser, extensionId, server.url, downloadDir);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkSilentStream(browser, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);

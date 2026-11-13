@@ -9,6 +9,7 @@ import {
   type EngineCommand,
 } from '../../src/engine/engine-messages.ts';
 import type { EngineJob, EngineSignal } from '../../src/engine/engine-types.ts';
+import { recordingFixture } from './recording-fixtures.ts';
 
 const ITEM: MediaItem = {
   id: 'https://cdn.example.com/master.m3u8',
@@ -71,5 +72,35 @@ describe('engine signals', () => {
     ['a file of another job', { type: 'engine-signal', signal: { kind: 'finished', jobId: 'job2', result: ok(FINISHED) } }],
   ])('refuses %s', (_name, message) => {
     expect(parseEngineSignalMessage(message).ok).toBe(false);
+  });
+});
+
+describe('engine commands for a recording', () => {
+  const CAPTURE_ITEM: MediaItem = { ...ITEM, id: 'capture-1', url: 'https://www.example.com/watch', kind: 'capture' };
+  const CAPTURE_OPTION: QualityOption = { quality: 'best', label: 'Recording' };
+  const { recording } = recordingFixture({ viaUrl: true });
+  const [video] = recording.buffers;
+  const CAPTURE_JOB: EngineJob = { jobId: 'job1', filename: 'Show.mp4', item: CAPTURE_ITEM, option: CAPTURE_OPTION, recording };
+
+  function started(job: unknown): unknown {
+    return { type: 'engine-command', command: { kind: 'start', job } };
+  }
+
+  test('a start with a recording survives the trip, parts reached by address', () => {
+    const parsed = parseEngineCommandMessage(JSON.parse(JSON.stringify(engineCommandMessage({ kind: 'start', job: CAPTURE_JOB }))));
+
+    expect(parsed).toEqual(ok({ kind: 'start', job: CAPTURE_JOB }));
+  });
+
+  test.each<[string, unknown]>([
+    ['a recording item without a recording', started({ ...CAPTURE_JOB, recording: undefined })],
+    ['a stream with a recording', started({ ...CAPTURE_JOB, item: ITEM, option: OPTION })],
+    ['a recording without buffers', started({ ...CAPTURE_JOB, recording: { buffers: [] } })],
+    ['a buffer of an unknown kind', started({ ...CAPTURE_JOB, recording: { buffers: [{ ...video, kind: 'text' }] } })],
+    ['a part without an address', started({ ...CAPTURE_JOB, recording: { buffers: [{ ...video, init: { name: 'v-init' } }] } })],
+    ['a part with a File only, which cannot travel', started({ ...CAPTURE_JOB, recording: { buffers: [{ ...video, init: { name: 'v-init', file: { size: 1 } } }] } })],
+    ['a segment at a negative time', started({ ...CAPTURE_JOB, recording: { buffers: [{ ...video, fragments: [{ name: 's', url: 'blob:page/s', startSeconds: -1 }] }] } })],
+  ])('refuses %s', (_name, message) => {
+    expect(parseEngineCommandMessage(message).ok).toBe(false);
   });
 });
