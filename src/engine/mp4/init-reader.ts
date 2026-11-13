@@ -3,6 +3,7 @@ import { childBoxes, findBox, readBoxes, sliceBox, textAt, viewOf, type Box } fr
 import type { SampleDefaults, TrackInfo, TrackKind } from './types.ts';
 
 export const DAMAGED_MESSAGE = 'A part of the video is damaged and cannot be joined.';
+export const ENCRYPTED_MESSAGE = 'This video is protected (encrypted) and cannot be downloaded.';
 
 /** Sample entries the muxer writes. Anything else is reported rather than written into a file nobody can play. */
 const SUPPORTED_CODECS: readonly string[] = ['avc1', 'avc3', 'hvc1', 'hev1', 'av01', 'vp09', 'mp4a', 'ac-3', 'ec-3', 'Opus'];
@@ -87,7 +88,7 @@ function readTrack(data: Uint8Array, trak: Box, defaults: Map<number, SampleDefa
 
   const codec = textAt(data, stsd.body + 12, 4);
   if (ENCRYPTED_CODECS.includes(codec)) {
-    return fail('This video is protected (encrypted) and cannot be downloaded.');
+    return fail(ENCRYPTED_MESSAGE);
   }
   if (!SUPPORTED_CODECS.includes(codec)) {
     return fail(unsupportedCodec(codec));
