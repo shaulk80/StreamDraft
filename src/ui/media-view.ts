@@ -6,7 +6,7 @@ import { createElement } from './dom.ts';
 import { createJobPanel } from './job-panel.ts';
 import type { JobsView } from './job-tracker.ts';
 
-const KIND_LABELS = { direct: 'Direct file', hls: 'HLS stream', dash: 'DASH stream' } as const;
+const KIND_LABELS = { direct: 'Direct file', hls: 'HLS stream', dash: 'DASH stream', capture: 'Recording' } as const;
 
 function qualityLabel(option: QualityOption): string {
   if (option.sizeBytes === undefined) {

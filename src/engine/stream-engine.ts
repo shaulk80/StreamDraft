@@ -2,14 +2,17 @@ import { fail, ok, type Result } from '../core/result.ts';
 import type { FetchText } from '../detect/manifest-fetch.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
 import type { EngineJob, EngineSignal, FinishedFile } from './engine-types.ts';
-import { muxStreams } from './mux-job.ts';
+import { muxStreams, type MuxProgress } from './mux-job.ts';
 import type { FileLike } from './opfs-store.ts';
 import type { OutputSink } from './output-sink.ts';
+import { planRecording } from './recording-plan.ts';
+import type { RecordingInput } from './recording-input.ts';
+import { RecordingStore } from './recording-store.ts';
 import { SegmentDecryptor } from './segment-decryptor.ts';
 import type { FetchSegment } from './segment-fetcher.ts';
 import { runSegmentJob } from './segment-job.ts';
 import type { SegmentStore } from './segment-store.ts';
-import { planStream } from './stream-plan.ts';
+import { planStream, type StreamPlan } from './stream-plan.ts';
 
 /** The finished file: written like an output sink, readable once committed. */
 export interface FinishedOutput extends OutputSink {
@@ -37,6 +40,18 @@ interface HeldJob {
   controller: AbortController;
   files?: JobFiles;
   url?: string;
+}
+
+/** What the join needs, whether the parts were fetched or recorded. */
+interface PreparedJob {
+  /** The job's folder; the joined file is written there. */
+  files: JobFiles;
+  /** Where the muxer reads the parts from. */
+  store: SegmentStore;
+  plan: Pick<StreamPlan, 'sources' | 'soundOnly'>;
+  decryptor?: SegmentDecryptor;
+  /** Reported while joining; a fetched stream reports while fetching instead. */
+  onProgress?: (progress: MuxProgress) => void;
 }
 
 const OUTPUT_NAME = 'output';
@@ -105,6 +120,27 @@ export class StreamEngine {
   }
 
   private async download(job: EngineJob, entry: HeldJob): Promise<Result<FinishedFile>> {
+    const prepared = job.recording === undefined ? await this.fetchParts(job, entry) : await this.openRecording(job, job.recording, entry);
+    if (!prepared.ok) {
+      return prepared;
+    }
+
+    const { files, store, plan, decryptor, onProgress } = prepared.value;
+    const output = await files.createOutput(OUTPUT_NAME);
+    if (!output.ok) {
+      return output;
+    }
+
+    const joined = await muxStreams(plan.sources, store, output.value, { decryptor, signal: entry.controller.signal, soundOnly: plan.soundOnly, onProgress });
+    if (!joined.ok) {
+      await output.value.abort();
+      return joined;
+    }
+    return this.finishOutput(job, entry, output.value, MIME_TYPES[joined.value.extension]);
+  }
+
+  /** A stream: plans the quality and fetches every part into the job's folder. */
+  private async fetchParts(job: EngineJob, entry: HeldJob): Promise<Result<PreparedJob>> {
     const { signal } = entry.controller;
     const plan = await planStream(job.item, job.option, this.deps.fetchText);
     if (!plan.ok) {
@@ -130,17 +166,32 @@ export class StreamEngine {
     }
 
     const decryptor = plan.value.encrypted ? SegmentDecryptor.withFetcher(this.deps.fetchSegment, signal) : undefined;
-    const output = await files.value.createOutput(OUTPUT_NAME);
-    if (!output.ok) {
-      return output;
+    return ok({ files: files.value, store: files.value, plan: plan.value, decryptor });
+  }
+
+  /** A recording: nothing to fetch, the parts are read where the page left them. The folder only holds the output. */
+  private async openRecording(job: EngineJob, recording: RecordingInput, entry: HeldJob): Promise<Result<PreparedJob>> {
+    const plan = planRecording(recording, job.option.quality === 'audio');
+    if (!plan.ok) {
+      return plan;
     }
 
-    const joined = await muxStreams(plan.value.sources, files.value, output.value, { decryptor, signal, soundOnly: plan.value.soundOnly });
-    if (!joined.ok) {
-      await output.value.abort();
-      return joined;
+    const files = await this.deps.openFiles(job.jobId);
+    if (!files.ok) {
+      return files;
     }
-    return this.finishOutput(job, entry, output.value, MIME_TYPES[joined.value.extension]);
+    entry.files = files.value;
+
+    const { signal } = entry.controller;
+    const store = new RecordingStore(recording, (url) => this.deps.fetchSegment({ url }, signal));
+    const totalSegments = plan.value.sources.reduce((sum, source) => sum + source.segments.length, 0);
+    this.deps.notify({ kind: 'progress', jobId: job.jobId, progress: { doneSegments: 0, totalSegments, bytes: 0 } });
+    return ok({
+      files: files.value,
+      store,
+      plan: plan.value,
+      onProgress: (progress) => this.deps.notify({ kind: 'progress', jobId: job.jobId, progress: { ...progress, bytes: 0 } }),
+    });
   }
 
   /** Commits the joined file and makes the address the browser downloads it from. */

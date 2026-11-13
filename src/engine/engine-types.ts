@@ -1,5 +1,6 @@
 import type { MediaItem, QualityOption } from '../core/media.ts';
 import type { Result } from '../core/result.ts';
+import type { RecordingInput } from './recording-input.ts';
 import type { JobProgress } from './segment-job.ts';
 
 /** One stream download, as the background hands it to the engine. Plain data: it travels in messages. */
@@ -10,6 +11,8 @@ export interface EngineJob {
   filename: string;
   item: MediaItem;
   option: QualityOption;
+  /** A captured recording to join instead of a stream to fetch; the item is then of kind `capture`. */
+  recording?: RecordingInput;
 }
 
 /** The finished video, ready for the browser to save. */
