@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft main world test page</title>
+  </head>
+  <body>
+    <h1>StreamDraft main world test page</h1>
+    <p>
+      The page keeps a player response in a variable of its own scripts, the way a video site does
+      (<code>ytInitialPlayerResponse</code>). The extension reads it from the page's own JavaScript environment and
+      keeps it for this tab; nothing shows on the page or in the popup. It is checked in the smoke tests.
+    </p>
+    <script>
+      var ytInitialPlayerResponse = {
+        videoDetails: { videoId: 'spike-video-1', title: 'Main world test video' },
+        streamingData: { adaptiveFormats: [{ itag: 18, mimeType: 'video/mp4; codecs="avc1.42001E"', url: 'https://example.invalid/video.mp4' }] },
+      };
+    </script>
+  </body>
+</html>

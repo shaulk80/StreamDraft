@@ -19,6 +19,7 @@ import {
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
+import { MAIN_WORLD_PAGE, pageDataProblem, pageDataScript } from './page-data.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
@@ -318,6 +319,22 @@ async function checkStreamParts(driver: firefox.Driver, pageUrl: string): Promis
     return;
   }
   console.log('Firefox runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
+}
+
+// A variable of the page's own scripts must reach the background: only a MAIN-world content script can read it.
+async function checkPageData(driver: firefox.Driver, pageUrl: string): Promise<void> {
+  await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await openInNewTab(driver, `moz-extension://${FIXED_UUID}/options.html`);
+  const storedProblem = async (): Promise<string | undefined> =>
+    pageDataProblem(await driver.executeAsyncScript<string>(`const done = arguments[arguments.length - 1]; (${pageDataScript('browser')}).then(done);`));
+  try {
+    await driver.wait(async () => (await storedProblem()) === undefined, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    problems.push(`firefox runtime: page data: ${String(await storedProblem())}`);
+    return;
+  }
+  console.log("Firefox runtime: page data: the MAIN-world script read the page's own variable and the background holds it for the tab");
 }
 
 /** The open popup, for reading the text of its cards (nothing to press, nothing to reload). */
@@ -738,6 +755,7 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkDetection(driver, testPage.url, downloadDir);
       await checkStreams(driver, testPage.url);
       await checkStreamParts(driver, testPage.url);
+      await checkPageData(driver, testPage.url);
       await checkStreamDownloads(driver, testPage.url, downloadDir);
       await checkSilentStream(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);

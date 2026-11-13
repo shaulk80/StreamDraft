@@ -1,7 +1,8 @@
 import { backgroundDownloadAction } from '../src/ui/download-client.ts';
-import { foundMediaMessage, isRescanMediaMessage, parseShowTextMessage } from '../src/core/messages.ts';
+import { foundMediaMessage, isRescanMediaMessage, pageDataMessage, parseShowTextMessage } from '../src/core/messages.ts';
 import { ok } from '../src/core/result.ts';
 import { DomScanner } from '../src/detect/dom-scanner.ts';
+import { parsePageDataPost } from '../src/extractors/page-data.ts';
 import { showToast } from '../src/ui/toast.ts';
 import { OverlayManager } from '../src/ui/overlay-manager.ts';
 import { SettingsStore } from '../src/ui/settings-store.ts';
@@ -34,6 +35,20 @@ export default defineContentScript({
       }
     });
     scanner.start();
+
+    // Variables of the page's own scripts, posted by the MAIN-world script (page-data-main.content.ts).
+    window.addEventListener('message', (event: MessageEvent) => {
+      if (event.source !== window) {
+        return;
+      }
+      const data = parsePageDataPost(event.data);
+      if (!data.ok) {
+        return;
+      }
+      browser.runtime.sendMessage(pageDataMessage(data.value)).catch((error: unknown) => {
+        console.error('StreamDraft: could not report page data', error);
+      });
+    });
 
     browser.runtime.onMessage.addListener((message: unknown) => {
       // The context menu entry (background) asks the page to show what happened.

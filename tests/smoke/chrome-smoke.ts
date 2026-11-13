@@ -19,6 +19,7 @@ import {
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
+import { MAIN_WORLD_PAGE, pageDataProblem, pageDataScript } from './page-data.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
@@ -216,6 +217,19 @@ async function checkStreamParts(browser: CdpConnection, extensionId: string, pag
     return;
   }
   console.log('Chrome runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
+}
+
+// A variable of the page's own scripts must reach the background: only a MAIN-world content script can read it.
+async function checkPageData(browser: CdpConnection, extensionId: string, pageUrl: string): Promise<void> {
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  const options = await Page.open(browser, `chrome-extension://${extensionId}/options.html`);
+  const storedProblem = async (): Promise<string | undefined> => pageDataProblem(await options.evaluate<string>(pageDataScript('chrome')));
+  const stored = await waitFor(async () => ((await storedProblem()) === undefined ? true : undefined));
+  if (!stored) {
+    problems.push(`chrome runtime: page data: ${String(await storedProblem())}`);
+    return;
+  }
+  console.log("Chrome runtime: page data: the MAIN-world script read the page's own variable and the background holds it for the tab");
 }
 
 // The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on
@@ -590,6 +604,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkDetectionAndDownload(browser, extensionId, server.url, downloadDir);
     await checkStreams(browser, extensionId, server.url);
     await checkStreamParts(browser, extensionId, server.url);
+    await checkPageData(browser, extensionId, server.url);
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkSilentStream(browser, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);

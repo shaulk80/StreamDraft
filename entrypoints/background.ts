@@ -3,6 +3,7 @@ import {
   parseCancelJobMessage,
   parseDownloadMediaMessage,
   parseFoundMediaMessage,
+  parsePageDataMessage,
   parseResolveStreamsMessage,
   showTextMessage,
 } from '../src/core/messages.ts';
@@ -19,6 +20,8 @@ import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
 import { StreamResolver } from '../src/detect/stream-resolver.ts';
+import { checkPageData } from '../src/extractors/page-data.ts';
+import { PageDataStore } from '../src/extractors/page-data-store.ts';
 import { ExtractorRegistry } from '../src/extractors/extractor-registry.ts';
 import { fail, ok } from '../src/core/result.ts';
 import { BadgeController } from '../src/ui/badge.ts';
@@ -35,6 +38,7 @@ export default defineBackground(() => {
   const registry = new MediaRegistry(browser.storage.session);
   // Site extractors go in the list when there are any (M4); every other page gets the generic one.
   const extractors = new ExtractorRegistry();
+  const pageData = new PageDataStore(browser.storage.session);
   const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
 
   // Streams are downloaded by the engine: in this page on Firefox, in an offscreen
@@ -87,6 +91,17 @@ export default defineBackground(() => {
       }
       // Answered after the videos are stored: a page that rescans on request waits for it.
       return addPageCandidates(registry, extractors, sender.tab.id, sender.tab.url, found.value).then((count) => ok(count));
+    }
+
+    const data = parsePageDataMessage(message);
+    if (data.ok) {
+      // The sender is a page's content script; the data belongs to its tab and is page content, not trusted.
+      const checked = checkPageData(data.value);
+      if (sender.tab?.id === undefined || !checked.ok) {
+        console.error(`StreamDraft: page data ignored: ${checked.ok ? 'no tab' : checked.error}`);
+        return undefined;
+      }
+      return pageData.save(sender.tab.id, checked.value);
     }
 
     const resolve = parseResolveStreamsMessage(message);

@@ -1,5 +1,6 @@
 import { isQuality, type Quality } from './settings.ts';
 import type { MediaCandidate } from './media.ts';
+import type { PageData } from './page-data.ts';
 import { fail, ok, type Result } from './result.ts';
 
 /** Message the popup sends to the background to check that it is running. */
@@ -104,6 +105,30 @@ function toCandidate(entry: unknown): MediaCandidate | undefined {
     pageUrl: typeof pageUrl === 'string' ? pageUrl : undefined,
     pageTitle: typeof pageTitle === 'string' ? pageTitle : undefined,
   };
+}
+
+/** Message a page's content script sends to the background with a variable of the page's own scripts (see `src/extractors/page-data.ts`). */
+export const PAGE_DATA = 'page-data';
+
+export interface PageDataMessage extends PageData {
+  type: typeof PAGE_DATA;
+}
+
+export function pageDataMessage(data: PageData): PageDataMessage {
+  return { type: PAGE_DATA, name: data.name, json: data.json };
+}
+
+/** The page data of a page-data message, or an error when `message` is not one. The caller checks the name and size. */
+export function parsePageDataMessage(message: unknown): Result<PageData> {
+  if (typeof message !== 'object' || message === null) {
+    return fail('Message must be an object.');
+  }
+
+  const { type, name, json } = message as { type?: unknown; name?: unknown; json?: unknown };
+  if (type !== PAGE_DATA || typeof name !== 'string' || typeof json !== 'string') {
+    return fail('Not a page-data message.');
+  }
+  return ok({ name, json });
 }
 
 /** Message a popup or page sends to the background to download one of the videos found on a tab. */
