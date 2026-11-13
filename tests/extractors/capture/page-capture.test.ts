@@ -70,6 +70,17 @@ describe('PageCapture', () => {
     expect([...(root.directories.get('streamdraft-capture')?.directories.values() ?? [])]).toEqual([]);
   });
 
+  test('after discard the status shows nothing recorded, and later appends of the old buffers are not recorded', async () => {
+    const { capture } = setup();
+    feed(capture, player(3, 3));
+    await capture.discard();
+
+    feed(capture, [{ kind: 'append', bufferId: 1, bytes: secondSegment(VIDEO_TRACK, 0), durationSeconds: 3 }]);
+    const status = await capture.status();
+
+    expect(status).toMatchObject({ complete: false, buffers: [] });
+  });
+
   test('status waits for what the player already appended', async () => {
     const { capture } = setup();
     feed(capture, player(3, 3));

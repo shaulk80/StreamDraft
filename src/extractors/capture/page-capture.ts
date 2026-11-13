@@ -53,7 +53,7 @@ export function recordingProblem(snapshot: CaptureSnapshot): string | undefined 
  * content script of an armed page.
  */
 export class PageCapture {
-  private readonly session: CaptureSession;
+  private session: CaptureSession;
   private readonly handedOut: string[] = [];
 
   constructor(
@@ -94,8 +94,14 @@ export class PageCapture {
     return ok({ buffers });
   }
 
-  /** Removes the recording's files and the addresses given out for them. */
+  /**
+   * Removes the recording's files and the addresses given out for them, and forgets what the player did, so
+   * that the status says "nothing recorded" afterwards. What the player appends later is not recorded: it
+   * belongs to buffers this page no longer knows (Record reloads the page for a new recording).
+   */
   async discard(): Promise<void> {
+    await this.session.settled();
+    this.session = new CaptureSession(this.sink);
     this.handedOut.splice(0).forEach((address) => this.addresses?.release(address));
     await this.sink.clear();
   }
