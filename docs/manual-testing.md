@@ -89,6 +89,7 @@ Two checklists follow, one per milestone: **5. M2** (finding videos and download
 - [ ] Default quality: plain files have one quality, so nothing changes for them; check that picking another one does not break a download.
 - [ ] (quick) Browser setting "ask where to save files" (Firefox: Settings, General, Downloads; Chrome: Settings, Downloads, "Ask where to save each file"): with it on, a download from the popup, the button and the menu opens the save dialog, with the template name filled in; with it off, the file goes straight to the download folder.
 - [ ] Settings survive closing and reopening the browser (not the temporary Firefox add-on: it is removed on exit).
+- [ ] (M4, experimental) "Experimental: record from the player" is unticked after a fresh install and lists `youtube.com`. A bad line such as `https://youtube.com/watch` shows an error that says to write only the name, and is not saved. The site list is saved when you leave the box, not on every key. Ticking the box and removing a site both reach pages you open or reload afterwards. (Nothing visible happens yet: the recording itself comes with the next tasks of M4.)
 
 **Sample screens** (M1, kept for review): add `?mock=1` to the popup address to see the four sample videos (direct, HLS, DASH, DRM-protected) and `?mock=empty` for the empty state. The popup address is `moz-extension://<id>/popup.html` in Firefox (id shown on `about:debugging`) and `chrome-extension://<id>/popup.html` in Chrome (id on `chrome://extensions`). Download on those only says what it would do.
 

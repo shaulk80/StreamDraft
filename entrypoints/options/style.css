@@ -43,3 +43,15 @@ small {
 #form-status.error {
   color: #c62828;
 }
+
+.experiment {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+}
+
+.field textarea {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  resize: vertical;
+}

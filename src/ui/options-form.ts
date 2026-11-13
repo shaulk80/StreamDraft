@@ -1,5 +1,6 @@
 import { renderFilename, validateSettings, QUALITIES, type Settings } from '../core/settings.ts';
 import { MOCK_MEDIA } from '../core/mock-media.ts';
+import { formatSiteList, parseSiteList } from '../core/site-list.ts';
 import type { Result } from '../core/result.ts';
 
 /** The form controls of the options page, looked up once. */
@@ -8,6 +9,8 @@ export interface OptionsControls {
   contextMenu: HTMLInputElement;
   filenameTemplate: HTMLInputElement;
   defaultQuality: HTMLSelectElement;
+  playerCapture: HTMLInputElement;
+  playerCaptureSites: HTMLTextAreaElement;
   preview: HTMLElement;
   status: HTMLElement;
 }
@@ -23,6 +26,8 @@ export function findControls(root: Document): OptionsControls | undefined {
     contextMenu: byId<HTMLInputElement>(root, 'context-menu'),
     filenameTemplate: byId<HTMLInputElement>(root, 'filename-template'),
     defaultQuality: byId<HTMLSelectElement>(root, 'default-quality'),
+    playerCapture: byId<HTMLInputElement>(root, 'player-capture'),
+    playerCaptureSites: byId<HTMLTextAreaElement>(root, 'player-capture-sites'),
     preview: byId<HTMLElement>(root, 'filename-preview'),
     status: byId<HTMLElement>(root, 'form-status'),
   };
@@ -54,16 +59,28 @@ export function writeSettings(controls: OptionsControls, settings: Settings): vo
     controls.filenameTemplate.value = settings.filenameTemplate;
   }
   controls.defaultQuality.value = settings.defaultQuality;
+  controls.playerCapture.checked = settings.playerCapture;
+  const sites = formatSiteList(settings.playerCaptureSites);
+  if (controls.playerCaptureSites.value !== sites) {
+    controls.playerCaptureSites.value = sites;
+  }
   showPreview(controls, settings);
 }
 
 /** Reads the form. The result carries the message to show when a value is not usable. */
 export function readSettings(controls: OptionsControls): Result<Settings> {
+  const sites = parseSiteList(controls.playerCaptureSites.value);
+  if (!sites.ok) {
+    return sites;
+  }
+
   return validateSettings({
     inPageButton: controls.inPageButton.checked,
     contextMenu: controls.contextMenu.checked,
     filenameTemplate: controls.filenameTemplate.value,
     defaultQuality: controls.defaultQuality.value as Settings['defaultQuality'],
+    playerCapture: controls.playerCapture.checked,
+    playerCaptureSites: sites.value,
   });
 }
 

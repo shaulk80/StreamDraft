@@ -20,6 +20,7 @@ import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
 import { MediaRegistry } from '../src/detect/registry.ts';
 import { StreamResolver } from '../src/detect/stream-resolver.ts';
+import { CaptureRegistrar } from '../src/extractors/capture-registration.ts';
 import { checkPageData } from '../src/extractors/page-data.ts';
 import { PageDataStore } from '../src/extractors/page-data-store.ts';
 import { ExtractorRegistry } from '../src/extractors/extractor-registry.ts';
@@ -39,6 +40,8 @@ export default defineBackground(() => {
   // Site extractors go in the list when there are any (M4); every other page gets the generic one.
   const extractors = new ExtractorRegistry();
   const pageData = new PageDataStore(browser.storage.session);
+  // The player capture script exists in the browser only while the setting is on, and only for the listed sites.
+  const capture = new CaptureRegistrar(browser.scripting, 'content-scripts/player-capture-main.js');
   const resolver = new StreamResolver(registry, createManifestFetcher((url, init) => fetch(url, init)));
 
   // Streams are downloaded by the engine: in this page on Firefox, in an offscreen
@@ -131,7 +134,10 @@ export default defineBackground(() => {
     return Promise.resolve(handleMessage(message, startedAt));
   });
 
-  store.onChange((settings) => void menu.apply(settings));
+  store.onChange((settings) => {
+    void menu.apply(settings);
+    void capture.apply(settings);
+  });
 
   // A finished stream is given to the browser's downloads; this says when the browser is done with it.
   browser.downloads.onChanged.addListener((change) => void coordinator.handleDownloadChange(change));
@@ -215,5 +221,8 @@ export default defineBackground(() => {
   registerDetection();
 
   // The menu is rebuilt on every start, so it always matches the stored settings.
-  void store.load().then((settings) => menu.apply(settings));
+  void store.load().then((settings) => {
+    void capture.apply(settings);
+    return menu.apply(settings);
+  });
 });

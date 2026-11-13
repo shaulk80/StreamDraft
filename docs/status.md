@@ -6,7 +6,8 @@ Updated: 2026-11-13. Keep this file under 40 lines. History belongs in git and p
 
 M0 to M3 are done and merged. M3 (HLS, DASH, audio-only) met its Definition of Done on 2026-11-12: the owner checked it by hand in Firefox and Chrome (results per group in `docs/manual-testing.md`, section 6), CI is green.
 What works: direct files, HLS and DASH streams are found and listed with their qualities and "Audio only"; a stream is fetched, joined into one flat MP4 (or an `.m4a`) through OPFS with progress and Cancel and saved through the downloads API; protected streams are listed as protected and never downloaded; a 1.1 GB stream downloads with flat memory. A manifest is read as soon as it is found and the files it names are not listed as videos (decision 0007).
-M4 (branch `m4-site-extractors`) has its task list in `docs/plan.md`. Task 1 (extractor interface, generic extractor) is committed. Task 2 (MAIN-world script reads a page variable, background keeps it per tab) is committed. Task 3 (decision 0008) found that YouTube's page gives no downloadable address (SABR only, PO token needed) and recommends no-go. Next: task 4, the owner's go/no-go at the gate. Known gaps of M3 are GitHub issues #20 to #23 and the list in `docs/manual-testing.md`, section 7.
+M4 (branch `m4-site-extractors`, plan in `docs/plan.md`): decision 0008 found that YouTube's page gives no address to download; decision 0009 (owner, 2026-11-13) drops the YouTube extractor and goes for a generic player capture as an experiment, off by default and switchable globally and per site. Done and committed: extractor interface (task 1), MAIN-world reader (2), YouTube findings (3). Done, not yet committed: the switches (task 5: settings, options section, runtime-registered page script, `scripting` permission). Next: task 6, the spikes and the second gate.
+Known gaps of M3 are GitHub issues #20 to #23 and the list in `docs/manual-testing.md`, section 7.
 
 ## Releases
 

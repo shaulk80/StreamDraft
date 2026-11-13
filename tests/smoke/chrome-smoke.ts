@@ -19,7 +19,16 @@ import {
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
-import { MAIN_WORLD_PAGE, pageDataProblem, pageDataScript } from './page-data.ts';
+import {
+  captureSettingScript,
+  clearPageDataScript,
+  hasPageData,
+  MAIN_WORLD_PAGE,
+  NOTHING_HAPPENS_MS,
+  pageDataProblem,
+  pageDataScript,
+  SETTING_SETTLE_MS,
+} from './page-data.ts';
 import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the Chrome PACKAGE in a real (headless) Chrome:
@@ -219,17 +228,38 @@ async function checkStreamParts(browser: CdpConnection, extensionId: string, pag
   console.log('Chrome runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
 }
 
-// A variable of the page's own scripts must reach the background: only a MAIN-world content script can read it.
+// The player capture is a switch: off, no page gets the MAIN-world script; on for a site, that site's page
+// hands a variable of its own scripts to the background; off again, nothing more arrives.
 async function checkPageData(browser: CdpConnection, extensionId: string, pageUrl: string): Promise<void> {
-  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
   const options = await Page.open(browser, `chrome-extension://${extensionId}/options.html`);
-  const storedProblem = async (): Promise<string | undefined> => pageDataProblem(await options.evaluate<string>(pageDataScript('chrome')));
-  const stored = await waitFor(async () => ((await storedProblem()) === undefined ? true : undefined));
-  if (!stored) {
-    problems.push(`chrome runtime: page data: ${String(await storedProblem())}`);
+  const stored = async (): Promise<string | undefined> => options.evaluate<string>(pageDataScript('chrome'));
+
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await sleep(NOTHING_HAPPENS_MS);
+  if (hasPageData(await stored())) {
+    problems.push('chrome runtime: page data: the page was read although the player capture is off (the default)');
     return;
   }
-  console.log("Chrome runtime: page data: the MAIN-world script read the page's own variable and the background holds it for the tab");
+
+  await options.evaluate<string>(captureSettingScript('chrome', true, ['127.0.0.1']));
+  await sleep(SETTING_SETTLE_MS);
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  const read = await waitFor(async () => (pageDataProblem(await stored()) === undefined ? true : undefined));
+  if (!read) {
+    problems.push(`chrome runtime: page data: ${String(pageDataProblem(await stored()))}`);
+    return;
+  }
+
+  await options.evaluate<string>(captureSettingScript('chrome', false, ['127.0.0.1']));
+  await options.evaluate<string>(clearPageDataScript('chrome'));
+  await sleep(SETTING_SETTLE_MS);
+  await Page.open(browser, `${pageUrl}${MAIN_WORLD_PAGE}`);
+  await sleep(NOTHING_HAPPENS_MS);
+  if (hasPageData(await stored())) {
+    problems.push('chrome runtime: page data: the page was read after the player capture was switched off again');
+    return;
+  }
+  console.log("Chrome runtime: page data: off by default; switched on for the site, the MAIN-world script read the page's own variable and the background holds it; switched off again, nothing arrives");
 }
 
 // The page has two small streams with real segments (tests/pages/generated-stream.ts). Download on

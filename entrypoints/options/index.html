@@ -37,6 +37,23 @@
           <select id="default-quality"></select>
         </label>
 
+        <fieldset class="experiment">
+          <legend>Experimental: record from the player</legend>
+          <label class="row">
+            <input type="checkbox" id="player-capture" />
+            <span>Record the video a page plays (for sites without a download address)</span>
+          </label>
+          <label class="field">
+            <span>Only on these sites</span>
+            <textarea id="player-capture-sites" rows="3" spellcheck="false"></textarea>
+            <small>
+              One site per line, such as <code>youtube.com</code>; its subdomains are included. Remove a line to
+              switch the site off, or untick the box to switch all off. The change reaches pages you open or reload
+              afterwards. Downloading from some sites may be against their terms: you decide where to use it.
+            </small>
+          </label>
+        </fieldset>
+
         <p id="form-status" role="status"></p>
       </form>
     </main>

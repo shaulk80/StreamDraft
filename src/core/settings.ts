@@ -1,3 +1,4 @@
+import { MAX_CAPTURE_SITES, normalizeSite } from './site-list.ts';
 import { fail, ok, type Result } from './result.ts';
 
 export const QUALITIES = ['best', '1080p', '720p', '480p', '360p', 'audio'] as const;
@@ -8,6 +9,10 @@ export interface Settings {
   contextMenu: boolean;
   filenameTemplate: string;
   defaultQuality: Quality;
+  /** Experimental: record the video a page's player plays (M4). Off unless the user switches it on. */
+  playerCapture: boolean;
+  /** The only sites the player capture runs on (with their subdomains), plain names such as `youtube.com`. */
+  playerCaptureSites: string[];
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -15,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   contextMenu: true,
   filenameTemplate: '{title} [{quality}]',
   defaultQuality: 'best',
+  playerCapture: false,
+  playerCaptureSites: ['youtube.com'],
 };
 
 /** Storage key under which the settings object is kept. */
@@ -43,7 +50,26 @@ export function normalizeSettings(raw: unknown): Settings {
     contextMenu: typeof candidate.contextMenu === 'boolean' ? candidate.contextMenu : DEFAULT_SETTINGS.contextMenu,
     filenameTemplate: templateIsValid ? template : DEFAULT_SETTINGS.filenameTemplate,
     defaultQuality: isQuality(candidate.defaultQuality) ? candidate.defaultQuality : DEFAULT_SETTINGS.defaultQuality,
+    playerCapture:
+      typeof candidate.playerCapture === 'boolean' ? candidate.playerCapture : DEFAULT_SETTINGS.playerCapture,
+    playerCaptureSites: normalizeSites(candidate.playerCaptureSites),
   };
+}
+
+/** The usable sites of a stored list; a missing or broken list gives the default one, an empty list stays empty. */
+function normalizeSites(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [...DEFAULT_SETTINGS.playerCaptureSites];
+  }
+
+  const sites: string[] = [];
+  for (const entry of raw.slice(0, MAX_CAPTURE_SITES)) {
+    const site = typeof entry === 'string' ? normalizeSite(entry) : undefined;
+    if (site?.ok === true && !sites.includes(site.value)) {
+      sites.push(site.value);
+    }
+  }
+  return sites;
 }
 
 /** Checks settings coming from the options page; the error is shown to the user. */
@@ -54,6 +80,15 @@ export function validateSettings(settings: Settings): Result<Settings> {
   }
   if (!isQuality(settings.defaultQuality)) {
     return fail(`Unknown quality: ${String(settings.defaultQuality)}`);
+  }
+  if (settings.playerCaptureSites.length > MAX_CAPTURE_SITES) {
+    return fail(`Too many sites (the most is ${MAX_CAPTURE_SITES}).`);
+  }
+  for (const site of settings.playerCaptureSites) {
+    const checked = normalizeSite(site);
+    if (!checked.ok) {
+      return checked;
+    }
   }
   return ok(settings);
 }
