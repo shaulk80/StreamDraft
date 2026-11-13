@@ -6,7 +6,7 @@ Updated: 2026-11-13. Keep this file under 40 lines. History belongs in git and p
 
 M0 to M3 are done and merged. M3 (HLS, DASH, audio-only) met its Definition of Done on 2026-11-12: the owner checked it by hand in Firefox and Chrome (results per group in `docs/manual-testing.md`, section 6), CI is green.
 What works: direct files, HLS and DASH streams are found and listed with their qualities and "Audio only"; a stream is fetched, joined into one flat MP4 (or an `.m4a`) through OPFS with progress and Cancel and saved through the downloads API; protected streams are listed as protected and never downloaded; a 1.1 GB stream downloads with flat memory. A manifest is read as soon as it is found and the files it names are not listed as videos (decision 0007).
-M4 (branch `m4-site-extractors`) has its task list in `docs/plan.md`; task 1, the extractor interface and the generic extractor, is done and not yet committed. Next: task 2, the MAIN-world spike, then the YouTube data spike and the go/no-go gate. Known gaps of M3 are GitHub issues #20 to #23 and the list in `docs/manual-testing.md`, section 7.
+M4 (branch `m4-site-extractors`) has its task list in `docs/plan.md`. Task 1 (extractor interface, generic extractor) is committed. Task 2 (MAIN-world script reads a page variable, background keeps it per tab) works in both smoke tests, not yet committed. Next: task 3, what YouTube serves today, then the go/no-go gate. Known gaps of M3 are GitHub issues #20 to #23 and the list in `docs/manual-testing.md`, section 7.
 
 ## Releases
 
