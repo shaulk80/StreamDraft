@@ -73,6 +73,15 @@ Goal: one extractor interface and one working site extractor, or an explicit dec
 
 Done when: the extractor interface is in place and the generic detector uses it; the YouTube extractor works for ordinary public videos, or the owner decides at the gate (store policy, upkeep cost, reviewer risk) to drop it and records that.
 
+Tasks (written 2026-11-13, work in this order, one commit per task):
+1. Extractor interface (`src/extractors`): `Extractor { id, matches(url), extract(context) -> Result<MediaItem[]> }`, a registry that picks the extractor for a page address, and the generic extractor built from `detect` (network observer and page scanner feed it). The background lists items through the registry; behaviour for ordinary pages stays the same. Unit tests with `test.each`. Done: `src/extractors/` (`Extractor`, `ExtractorRegistry.forPage`, `GenericExtractor` over `classifyCandidate`); the network observer (page details of a first sighting) and the page reports (`addPageCandidates`) go through the registry; the first quick filter in the observer stays `classifyCandidate`, so the hot path of every response is unchanged. The overlay's `itemOfElement` still calls `classifyCandidate` directly (it runs in the page, where a site extractor has no say).
+2. Spike, MAIN world: check in Firefox and Chrome that a content script with `world: 'MAIN'` runs on a page, reads the page's own variables (for YouTube `ytInitialPlayerResponse`) and hands the data to the isolated script and the background. Record the result.
+3. Spike, YouTube data: what an ordinary public video offers today (formats with a plain `url`, formats with `signatureCipher`, SABR-only responses, tokens the player needs), and what each would cost in code. Rule: no `eval`, no remotely hosted code (an extractor that must run the player's signature script is a no). Write the findings and a recommendation in `docs/decisions/0008-youtube-feasibility.md`.
+4. Gate: the owner decides go or no-go (store policy, upkeep cost, reviewer risk) and the decision is recorded in `docs/decisions/0009-youtube-gate.md`. Tasks 5 and 6 are only done on a go.
+5. YouTube extractor: turns the player response into a `MediaItem` (qualities, audio-only, protected or unavailable videos reported as such), downloads through the existing engine plan; fixtures from saved player responses, `test.each`; a local test page that imitates the page variable, since the smoke tests must not call YouTube.
+6. Hand check on a few real public videos in Firefox and Chrome (owner), with a note on what breaks and how it shows in the popup.
+7. `docs/manual-testing.md` and `docs/status.md` updated (on a no-go the extractor code is removed and only the interface stays); pull request; owner reviews.
+
 ## M5: distribution
 
 Goal: a user can install from GitHub Releases and receive updates.
