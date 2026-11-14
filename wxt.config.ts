@@ -28,6 +28,8 @@ export default defineConfig({
       gecko: {
         id: 'streamdraft@shaulk80.github.io',
         strict_min_version: '140.0',
+        // Where Firefox looks for newer signed versions (decision 0011). Firefox build only.
+        ...(browser === 'firefox' ? { update_url: 'https://shaulk80.github.io/StreamDraft/updates.json' } : {}),
         data_collection_permissions: { required: ['none'] },
       },
       // Android is a non-goal, but the manifest key above needs Android 142.
