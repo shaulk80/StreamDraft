@@ -291,9 +291,10 @@ Tests what a user does, with files from the Releases page and not from your own 
 |---|---|---|---|
 | A. The release page and its files | pass | n/a | Owner, 2026-11-14, on `v0.1.0`. |
 | B. Install in Firefox | pass | n/a | Click on the `.xpi` offers the install (to save it, right-click and "Save Link As..."); no warning in `about:addons`; settings survive a restart. The player capture and downloads from YouTube were also tried by the owner in Firefox and Chrome: all work. |
-| C. Update in Firefox | open | n/a | Needs a later published version (`0.1.1`). |
-| D. Install and update in Chrome | n/a | install pass; update open | The update half needs `0.1.1`. |
-| E. The update manifest | pass, except the last line | n/a | `update_hash` equals the hash in `SHA256SUMS.txt` (also checked by Claude); "a pre-release does not change `updates.json`" needs a later release. |
+| C. Update in Firefox | update pass | n/a | Owner, 2026-11-14, from `0.1.0` to `0.1.1`: updated automatically, settings survived. The second-profile line and "Automatic Updates off" were skipped by the owner (not needed). |
+| D. Install and update in Chrome | n/a | pass | Update from `0.1.0` to `0.1.1` over the same folder and reload: new version shown, settings survived. |
+| E. The update manifest | pass | n/a | `update_hash` equals the hash in `SHA256SUMS.txt` (also checked by Claude); A pre-release on the tag `prerelease-check` (not `v*`, no files, deleted afterwards) was published on 2026-11-14: the `pages.yml` run skipped `build` and `deploy`, `updates.json` and its `last-modified` stayed as they were, and `release.yml` did not start. With `0.1.1` published: `updates.json` lists it, its hash equals the `.xpi` and the line in `SHA256SUMS.txt`, the link works (checked by Claude). |
+| F. What 0.1.1 changes | pass | pass | New icon and two same-name downloads pressed together: all worked (owner, 2026-11-14). |
 
 ### A. The release page and its files
 
