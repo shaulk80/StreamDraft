@@ -1,7 +1,7 @@
 {
   "name": "streamdraft",
   "description": "Download videos from the page you are on. Browser-only, no helper program.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
