@@ -289,11 +289,11 @@ Tests what a user does, with files from the Releases page and not from your own 
 
 | Group | Firefox | Chrome | Notes |
 |---|---|---|---|
-| A. The release page and its files | | n/a | |
-| B. Install in Firefox | | n/a | |
-| C. Update in Firefox | | n/a | |
-| D. Install and update in Chrome | n/a | | |
-| E. The update manifest | | n/a | |
+| A. The release page and its files | pass | n/a | Owner, 2026-11-14, on `v0.1.0`. |
+| B. Install in Firefox | pass | n/a | Click on the `.xpi` offers the install (to save it, right-click and "Save Link As..."); no warning in `about:addons`; settings survive a restart. The player capture and downloads from YouTube were also tried by the owner in Firefox and Chrome: all work. |
+| C. Update in Firefox | open | n/a | Needs a later published version (`0.1.1`). |
+| D. Install and update in Chrome | n/a | install pass; update open | The update half needs `0.1.1`. |
+| E. The update manifest | pass, except the last line | n/a | `update_hash` equals the hash in `SHA256SUMS.txt` (also checked by Claude); "a pre-release does not change `updates.json`" needs a later release. |
 
 ### A. The release page and its files
 

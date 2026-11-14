@@ -1,6 +1,6 @@
 # 0011: Signing and updates
 
-Date: 2026-11-14. Status: proposed, for the owner to confirm before task 2.
+Date: 2026-11-14. Status: accepted by the owner (carried out in `v0.1.0`; AMO accepted the sources zip and signed the first version on the first try).
 
 ## Decision
 
