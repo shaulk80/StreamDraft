@@ -3,7 +3,9 @@ name: Release
 # A "v*" tag creates a DRAFT release. A manual run (workflow_dispatch) is a
 # dry run: it does everything except create the release and uploads the files
 # as the "release-preview" artifact. The owner publishes the draft.
-# Firefox signing on AMO (unlisted) is added in milestone M5.
+# On a tag the Firefox build is signed on AMO (unlisted, decision 0011). A dry
+# run does not sign: AMO signs a version number only once, so a dry run would
+# use up the version of the real release.
 
 on:
   push:
@@ -64,6 +66,41 @@ jobs:
             echo "RELEASE_NOTES.md has no section starting with '## $VERSION '"
             exit 1
           fi
+
+      - name: Firefox signing skipped (dry run)
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "::notice title=Dry run::The Firefox build is not signed in a dry run, because AMO signs a version number only once."
+
+      - uses: pnpm/action-setup@v4
+        if: github.event_name == 'push'
+
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'push'
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # web-ext comes from the lockfile. Install scripts are not needed for it.
+      - name: Install dependencies
+        if: github.event_name == 'push'
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Without the AMO secrets the script warns and leaves the unsigned zip in place.
+      - name: Sign the Firefox build
+        if: github.event_name == 'push'
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: bash scripts/sign-firefox.sh assets signed
+
+      # Kept even when a later step fails: a version already signed cannot be signed again.
+      - name: Keep the signed Firefox package
+        if: always() && github.event_name == 'push' && hashFiles('signed/*.xpi') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-firefox
+          path: signed/*.xpi
+          retention-days: 90
 
       - name: Upload preview (dry run)
         if: github.event_name == 'workflow_dispatch'
