@@ -1,0 +1,89 @@
+name: Update manifest
+
+# Builds updates.json for Firefox (decision 0011) and publishes it on GitHub
+# Pages when the owner publishes a release. It points to the newest published
+# release that is not a pre-release and has a signed .xpi; it can be started by
+# hand to rebuild it. Needs Pages enabled with "GitHub Actions" as the source.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    # A pre-release is never offered as an update.
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Pick the release
+        id: pick
+        run: |
+          set -o pipefail
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases" \
+            | node scripts/pick-latest-release.ts >> "$GITHUB_OUTPUT"
+
+      - name: Download the signed package and check it against the release's checksums
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+          XPI: ${{ steps.pick.outputs.xpi }}
+        run: |
+          mkdir download
+          gh release download "$TAG" --pattern "$XPI" --pattern SHA256SUMS.txt --dir download
+          cd download
+          sha256sum -c --ignore-missing SHA256SUMS.txt
+          grep -q " \*$XPI\$" SHA256SUMS.txt
+
+      - name: Build updates.json
+        env:
+          TAG: ${{ steps.pick.outputs.tag }}
+          XPI: ${{ steps.pick.outputs.xpi }}
+        run: |
+          mkdir site
+          node scripts/make-update-manifest.ts \
+            --xpi "download/$XPI" \
+            --url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$XPI" \
+            --out site/updates.json
+          cat site/updates.json
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
