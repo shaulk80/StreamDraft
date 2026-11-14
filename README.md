@@ -4,14 +4,31 @@ A browser extension that downloads videos from the page you are on. Firefox is t
 
 ## Status
 
-Early development: it finds direct video and audio files (mp4, webm, mp3 and similar) on a page and downloads them from the popup, the in-page button or the right-click entry. Streams (HLS, DASH) are not downloaded yet (see `docs/status.md`). Planned for v1: direct video files, HLS and DASH streams, audio-only extraction, and site-specific support starting with YouTube. DRM-protected streams are not supported.
+Early development (version 0.x). It finds direct video and audio files (mp4, webm, mp3 and similar), HLS and DASH streams, and downloads them from the popup, the in-page button or the right-click entry. Streams are joined into one MP4 (or an `.m4a` for "Audio only") in the browser. Protected (DRM) streams are listed as protected and are not downloaded. An experimental recorder of the page's own player is built in and is off by default (Options). What works and what does not: `docs/status.md`, and the known issues below.
 
-Options planned: an in-page download button and a context-menu entry, each switchable.
+## Installing
 
-## Installing (when releases exist)
+Every release is on the [Releases page](https://github.com/shaulk80/StreamDraft/releases). Download only from there. `SHA256SUMS.txt` lists the hash of each file; to check one in PowerShell: `Get-FileHash -Algorithm SHA256 .streamdraft-<version>-firefox.xpi` and compare.
 
-- **Firefox:** click the signed `.xpi` on the Releases page. The build is signed by Mozilla as a self-distributed (unlisted) add-on; it is not listed on addons.mozilla.org.
-- **Chrome:** download the Chrome zip, unzip it, open `chrome://extensions`, turn on Developer mode and choose "Load unpacked". Chrome will remind you at startup that a developer-mode extension is loaded.
+### Firefox (primary)
+
+1. Open the Releases page in Firefox and click `streamdraft-<version>-firefox.xpi`.
+2. Firefox asks to add the extension and lists its permissions. Choose **Add**.
+3. If Firefox saves the file instead of asking, open `about:addons`, click the gear, choose **Install Add-on From File...** and pick the downloaded `.xpi`.
+
+The `.xpi` is signed by Mozilla as a self-distributed (unlisted) add-on. It is not listed on addons.mozilla.org, so there is no store page. Releases marked as pre-release (such as `0.0.1`) are not signed and install only in Firefox Developer Edition, Nightly or ESR with `xpinstall.signatures.required` set to false.
+
+**Updates.** Firefox checks for a newer signed version about once a day and installs it, as for any add-on; to check now, open `about:addons`, click the gear and choose **Check for Updates**. It is Firefox, not the extension, that asks `https://shaulk80.github.io/StreamDraft/updates.json` and then downloads the `.xpi` from GitHub; the extension itself still contacts only the sites you download from. Turn this off per add-on in `about:addons` (the extension's page, "Automatic Updates").
+
+### Chrome (secondary)
+
+There is no Chrome store listing and no automatic update.
+
+1. Download `streamdraft-<version>-chrome.zip` from the Releases page and unzip it into a folder you keep, such as `C:ToolsStreamDraft`.
+2. Open `chrome://extensions`, turn on **Developer mode** and choose **Load unpacked**, then pick that folder.
+3. Chrome reminds you at startup that a developer-mode extension is loaded.
+
+**Updates.** Download the newer zip, unzip it into the same folder (replace the files), then click the reload arrow on the extension's card in `chrome://extensions`. Keeping the folder keeps the extension's settings.
 
 ## Building
 
