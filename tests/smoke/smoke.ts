@@ -524,18 +524,19 @@ async function checkLargeStream(driver: firefox.Driver, pageUrl: string, downloa
 }
 
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
-// stream carries its sound inside the video segments and the engine takes it out.
+// stream carries its sound inside the video segments and the engine takes it out. Both are pressed
+// in the same instant and have the same file name, which made Firefox interrupt one of the two
+// downloads about once in three runs until the coordinator tried again (issue #23).
 async function checkSoundDownloads(driver: firefox.Driver, downloadDir: string): Promise<void> {
-  for (let card = 0; card < AUDIO_FILE_COUNT; card++) {
-    await driver.executeScript(saveSoundScript(card));
-    try {
-      await driver.wait(() => audioFileNames(readdirSync(downloadDir)).length === card + 1, WAIT_MS);
-    } catch (error) {
-      console.error(error);
-      const said = await driver.executeScript<string[]>("return [...document.querySelectorAll('#media-list .result')].map((result) => result.textContent);");
-      problems.push(`firefox runtime: audio only: card ${card + 1} of ${AUDIO_FILE_COUNT}: no .m4a file arrived in the download folder, found [${readdirSync(downloadDir).join(', ')}]; the popup said [${said.join(' | ')}]`);
-      return;
-    }
+  const pressBoth = Array.from({ length: AUDIO_FILE_COUNT }, (_unused, card) => `{ ${saveSoundScript(card)} }`).join(' ');
+  await driver.executeScript(pressBoth);
+  try {
+    await driver.wait(() => audioFileNames(readdirSync(downloadDir)).length === AUDIO_FILE_COUNT, WAIT_MS);
+  } catch (error) {
+    console.error(error);
+    const said = await driver.executeScript<string[]>("return [...document.querySelectorAll('#media-list .result')].map((result) => result.textContent);");
+    problems.push(`firefox runtime: audio only: ${AUDIO_FILE_COUNT} .m4a files did not arrive in the download folder, found [${readdirSync(downloadDir).join(', ')}]; the popup said [${said.join(' | ')}]`);
+    return;
   }
 
   // Both cards must have finished before the files are read: the name shows up while the file is written.

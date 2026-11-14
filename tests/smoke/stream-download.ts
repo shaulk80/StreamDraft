@@ -65,8 +65,8 @@ export function hlsFileProblem(filePath: string): string | undefined {
 
 /**
  * Picks "Audio only" on one stream card of the popup and presses Download; a statement list, wrap it
- * where an expression is needed. The cards are saved one at a time: both files have the same name, and
- * two downloads of one name started in the same instant can make the browser interrupt one of them.
+ * where an expression is needed. Wrap each call in braces to press several cards in one instant (the
+ * statements declare constants). Two cards have the same file name; see issue #23.
  */
 export function saveSoundScript(cardIndex: number): string {
   return `const card = document.querySelectorAll('#media-list .card')[${cardIndex}]; const picker = card.querySelector('select.quality'); picker.value = 'audio'; card.querySelector('.download').click();`;

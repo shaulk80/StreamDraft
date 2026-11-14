@@ -50,26 +50,52 @@ const HANDOFF_PREFIX = 'streamdraft.handoff.';
 const USER_CANCELED = 'USER_CANCELED';
 const NOT_SAVED = 'The browser could not save the finished video.';
 const NOT_STARTED = 'The browser could not start saving the finished video.';
+/**
+ * How long one save may keep the next one waiting. The trouble (issue #23) is two saves of one file
+ * name started in the same instant, not two a few seconds apart, so the next one need not wait for a big
+ * file to be written.
+ */
+const SAVE_TURN_MS = 5000;
 const ZERO_PROGRESS: JobProgress = { doneSegments: 0, totalSegments: 0, bytes: 0 };
+
+/**
+ * A finished file given to the browser's downloads. The address and name are kept so that the save
+ * can be started once more when the browser interrupts it, also by a background that was woken since.
+ */
+export interface Handoff {
+  jobId: string;
+  url: string;
+  filename: string;
+  /** True for the second try; a second interruption ends the job. */
+  retried: boolean;
+}
+
+function isHandoff(value: unknown): value is Handoff {
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  const candidate = value as Partial<Handoff>;
+  return typeof candidate.jobId === 'string' && typeof candidate.url === 'string' && typeof candidate.filename === 'string' && typeof candidate.retried === 'boolean';
+}
 
 /** Which job a browser download belongs to, kept in a storage area (`storage.session`). */
 export class DownloadHandoffs {
   constructor(private readonly area: JobAreaLike) {}
 
-  async remember(downloadId: number, jobId: string): Promise<void> {
+  async remember(downloadId: number, handoff: Handoff): Promise<void> {
     try {
-      await this.area.set({ [`${HANDOFF_PREFIX}${downloadId}`]: jobId });
+      await this.area.set({ [`${HANDOFF_PREFIX}${downloadId}`]: handoff });
     } catch (error) {
       console.error(`StreamDraft: could not remember download ${downloadId}`, error);
     }
   }
 
-  /** The job of the download, forgotten at the same time; undefined for a download that is not ours. */
-  async take(downloadId: number): Promise<string | undefined> {
+  /** The hand-off of the download, forgotten at the same time; undefined for a download that is not ours. */
+  async take(downloadId: number): Promise<Handoff | undefined> {
     const key = `${HANDOFF_PREFIX}${downloadId}`;
     try {
       const stored = (await this.area.get(key))[key];
-      if (typeof stored !== 'string') {
+      if (!isHandoff(stored)) {
         return undefined;
       }
       await this.area.remove(key);
@@ -95,6 +121,15 @@ interface TrackedJob {
  */
 export class JobCoordinator implements StreamStarter {
   private readonly tracked = new Map<string, TrackedJob>();
+  /**
+   * Finished files are given to the browser one at a time: Firefox picks the name of a file ("name (1)")
+   * when its download starts, and two downloads of one name started in the same instant can get the same
+   * name (one file then replaces the other) or make the browser interrupt one of them. Kept in memory
+   * only: it matters for a few seconds, and a woken background starts with nothing waiting.
+   */
+  private turn: Promise<void> = Promise.resolve();
+  /** What lets the next save start, by the id of the browser download that holds the turn. */
+  private readonly endTurns = new Map<number, () => void>();
 
   constructor(private readonly deps: JobCoordinatorDeps) {}
 
@@ -141,11 +176,21 @@ export class JobCoordinator implements StreamStarter {
       return;
     }
 
-    const jobId = await this.deps.handoffs.take(change.id);
-    if (jobId === undefined) {
+    this.endTurn(change.id);
+    const handoff = await this.deps.handoffs.take(change.id);
+    if (handoff === undefined) {
       return;
     }
-    await this.endHandoff(jobId, state, change.error?.current);
+
+    const reason = change.error?.current;
+    // Firefox can interrupt one of two same-name downloads started in the same instant (issue #23).
+    // The file is still in the extension's storage, so one more try is made; a cancel is the user's own.
+    if (state === 'interrupted' && reason !== USER_CANCELED && !handoff.retried) {
+      console.error(`StreamDraft: the browser interrupted the save of ${handoff.filename} (${String(reason)}); trying once more`);
+      await this.save({ ...handoff, retried: true });
+      return;
+    }
+    await this.endHandoff(handoff.jobId, state, reason);
   }
 
   private async onProgress(jobId: string, progress: JobProgress): Promise<void> {
@@ -160,22 +205,55 @@ export class JobCoordinator implements StreamStarter {
 
   /** Gives the finished file to the browser's downloads. */
   private async hand(file: FinishedFile): Promise<void> {
+    await this.save({ jobId: file.jobId, url: file.url, filename: file.filename, retried: false });
+  }
+
+  /** Starts the browser's save of the file; it ends the job when the browser will not even start it. */
+  private async save(handoff: Handoff): Promise<void> {
+    const endTurn = await this.waitForTurn();
     let downloadId: number;
     try {
-      downloadId = await this.deps.downloads.download({ url: file.url, filename: file.filename, conflictAction: 'uniquify' });
+      downloadId = await this.deps.downloads.download({ url: handoff.url, filename: handoff.filename, conflictAction: 'uniquify' });
     } catch (error) {
-      console.error(`StreamDraft: the browser refused to save ${file.filename}`, error);
-      await this.end(file.jobId, 'failed', NOT_STARTED);
-      await this.deps.host.release(file.jobId);
+      endTurn();
+      console.error(`StreamDraft: the browser refused to save ${handoff.filename}`, error);
+      await this.end(handoff.jobId, 'failed', NOT_STARTED);
+      await this.deps.host.release(handoff.jobId);
       return;
     }
 
-    await this.deps.handoffs.remember(downloadId, file.jobId);
+    this.endTurns.set(downloadId, endTurn);
+    await this.deps.handoffs.remember(downloadId, handoff);
     // A small file can be saved before the answer above is stored.
     const [current] = await this.searchDownload(downloadId);
     if (current?.state === 'complete' || current?.state === 'interrupted') {
       await this.handleDownloadChange({ id: downloadId, state: { current: current.state }, error: { current: current.error } });
     }
+  }
+
+  /** Waits until the save before this one has ended; the result lets the next save start. */
+  private async waitForTurn(): Promise<() => void> {
+    const before = this.turn;
+    let passOn: () => void = () => undefined;
+    this.turn = new Promise<void>((resolve) => {
+      passOn = resolve;
+    });
+    await before;
+
+    const timer = setTimeout(passOn, SAVE_TURN_MS);
+    return () => {
+      clearTimeout(timer);
+      passOn();
+    };
+  }
+
+  private endTurn(downloadId: number): void {
+    const endTurn = this.endTurns.get(downloadId);
+    if (endTurn === undefined) {
+      return;
+    }
+    this.endTurns.delete(downloadId);
+    endTurn();
   }
 
   private async searchDownload(id: number): Promise<{ state?: string; error?: string }[]> {
