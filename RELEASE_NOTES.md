@@ -1,5 +1,13 @@
 # Release notes
 
+## 0.1.1 (icon and a download fix)
+
+- A new icon, the same in Firefox and Chrome (toolbar button and extensions page). Before, Firefox showed its puzzle-piece placeholder and Chrome a grey letter.
+- Fixed #23: when two downloads with the same file name were handed to the browser in the same instant (for example the "Audio only" files of two streams on one page), Firefox could interrupt one of them or, worse, report both as saved while keeping only one file. Finished files are now handed to the browser one at a time, and a save that the browser interrupts is tried once more.
+- This is the first release that Firefox offers as an update to 0.1.0 (`about:addons`, gear, "Check for Updates"). Chrome: unzip the new zip over the folder and reload the extension.
+
+Known limitations (GitHub issues #20 to #22, and the README): as in 0.1.0, except that #23 is fixed.
+
 ## 0.1.0 (first usable release)
 
 The first release that downloads videos. Firefox is the primary browser, Chrome the secondary one.

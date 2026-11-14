@@ -140,7 +140,7 @@ M2 was checked completely when it was merged (PR #3), so nothing of it is open.
 - [ ] Download on the DASH card: the Download button waits, the card shows "Starting..." or a progress bar (it is over quickly), then "Saved to your downloads folder.", the button comes back, and the file `StreamDraft stream download test page [360p].mp4` is in the download folder, a few KB. The HLS card saves `... [original].mp4`. (The pictures are made-up bytes: the files are valid MP4 structure but do not play.)
 - [ ] Chrome only, optional: the engine runs in an "offscreen document", a hidden page of the extension that Chrome needs because a service worker cannot hold the file. You never see it; it exists only while a download runs and the smoke test already checks that it opens and closes. By hand: on `/large.html` (a download of about a minute) press Shift+Esc to open Chrome's Task Manager, start the download and look for a second "Extension: StreamDraft" row that appears during the download and is gone after "Saved".
 - [ ] Pick "Audio only" on the DASH card and press Download: the file `... [audio].m4a` is saved (a sound track of 4 samples, a few KB). On the HLS card the sound is cut out of the video segments: `... [audio].m4a` again, named with `(1)` after the first. (Made-up bytes: the files have valid structure but do not play.)
-- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads one after the other: two downloads of one name started in the same instant sometimes make Firefox interrupt one of them (seen in the smoke test); the card then says "Could not save the video. The browser could not save the finished video."
+- [ ] Download the same card twice: the second file is named with `(1)`; nothing is overwritten. Press the two downloads in the same instant (issue #23, fixed in 0.1.1): the files are handed to the browser one at a time, so both are saved, the second named with `(1)`, and neither card says "Could not save the video". Before 0.1.1 Firefox could interrupt one of the two or save only one file.
 
 **Job display page** (`/jobs.html`, M3 task 11): the popup lists two HLS streams of the same title; the first has 40 parts of 0.4 seconds each, in the second the second part is missing.
 - [ ] Download on the first card: the button is disabled, a progress bar fills and the line says "Downloading: 12% (...)" with a growing size; a Cancel button sits next to it.
@@ -324,3 +324,8 @@ Tests what a user does, with files from the Releases page and not from your own 
 - [ ] `updates.json` opens in the browser, lists one version, and its `update_link` opens (redirects to a download) the `.xpi` of that release.
 - [ ] Its `update_hash` equals the hash of that `.xpi` in `SHA256SUMS.txt`.
 - [ ] Publishing a pre-release does not change `updates.json`.
+
+### F. What 0.1.1 changes (after the update from 0.1.0)
+
+- [ ] The toolbar button and the extensions page show the new icon (an orange screen with a play button and a blue download badge) in Firefox and in Chrome, in a light and a dark theme.
+- [ ] On `/download.html`, pick "Audio only" on both stream cards and press both Download buttons as close together as you can, several times (delete the files in between): both files are saved every time, the second named with `(1)`, and no card says "Could not save the video".
