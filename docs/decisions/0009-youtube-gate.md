@@ -1,6 +1,6 @@
 # 0009: The M4 gate: record from the player, as an experiment behind switches
 
-Date: 2026-11-13. Status: accepted by the owner for an experiment; to be reviewed after it has been tried.
+Date: 2026-11-13. Status: accepted by the owner for an experiment. Reviewed 2026-11-14 after the manual run (all groups pass in Firefox and Chrome): the feature stays, off by default.
 
 ## Decision
 

@@ -46,6 +46,7 @@ Leave it running. Pages, all on `http://127.0.0.1:8123/`:
 | Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
 | Job display page | `/jobs.html` | a slow and a broken stream: progress, Cancel, failure text (M3) |
 | Large stream page | `/large.html` | one stream of 1.1 GB, built by the server as it is asked for (M3, large file check) |
+| Player capture page | `/mse.html` | a 12 s video played through Media Source Extensions: the recording, with `?switch=1` (quality changes in the middle) and `?eme=1` (encrypted media) for the refusals (M4) |
 
 The media files are filler bytes with the right content type. They do not play (the player shows an error), but they download. Sizes: `direct.mp4` 300 KB, `clip.webm` 250 KB, `song.mp3` 200 KB, `late.mp4` 220 KB, `hidden-stream` 400 KB, `tiny.mp4` 2 KB.
 
@@ -53,7 +54,9 @@ Downloads go to your normal download folder. The browser never overwrites: a sec
 
 ## 4. What to test
 
-Two checklists follow, one per milestone: **5. M2** (finding videos and downloading plain files) and **6. M3** (HLS, DASH, audio only, progress, large files). Do each in Firefox, then in Chrome.
+Three checklists follow, one per milestone: **5. M2** (finding videos and downloading plain files), **6. M3** (HLS, DASH, audio only, progress, large files) and **9. M4** (the player capture experiment, on the test page and on real sites). Do each in Firefox, then in Chrome.
+
+- **M4: all of it, once** (section 9). It ends with your decision on whether the feature stays on, stays off by default, or goes.
 
 - **M3: all of it** (done on 2026-11-12, see the results table in section 6; repeat it for a release). The last group, "Real streams", is the only way to learn whether the saved files play in a real player; the generated test pages make valid but made-up files.
 - **M2: done.** The owner went through the whole M2 checklist by hand in Firefox and Chrome when M2 was merged (PR #3), and the smoke tests cover its main paths on every build (section 8). The lines marked (quick) are the ones to repeat after a change to the popup, the background script or detection (about 10 minutes); do the rest of M2 only if one of them looks wrong.
@@ -176,6 +179,8 @@ M2 was checked completely when it was merged (PR #3), so nothing of it is open.
 - The extension asks for access to all sites (detection needs it; see `docs/decisions/0002-detection-permissions.md`).
 - The right-click entry has not been run in Chrome by the automated tests (headless Chrome cannot operate the menu): check it by hand there.
 
+- Player capture (M4, accepted costs of decision 0009): a recording starts at page load, so Record reloads the page; the video has to play through while the tab stays open (a background, covered or minimised tab recorded fine on YouTube in both browsers); the player is steered to H.264/AAC, so quality stops at what H.264 offers (up to 1080p on YouTube, no 4K); the recording is lost when the page is left or reloaded; only the newest video of a page is recorded; encrypted (DRM) media is never recorded.
+
 ## 8. What the automated tests already cover
 
 So you can skip it, or look only at how it feels:
@@ -185,3 +190,92 @@ So you can skip it, or look only at how it feels:
 - Player capture (M4, both smoke tests, `/mse.html`, the setting switched on for `127.0.0.1`): an ordinary load is still offered VP9; the real popup (in a frame) offers Record, pressing it reloads the page, the section reaches "The whole video is recorded", "Save audio only" saves a readable `.m4a` under a job panel, "Cancel recording" leaves the page with nothing recorded; the armed load is offered H.264 only and its recording saves as MP4 and `.m4a`; a quality switch and encrypted media are refused with a reason. The checklist for real sites is written in task 11.
 - Large file check (opt-in, `SMOKE_LARGE=1` before `pnpm run smoke` or `pnpm run smoke:chrome`; about a minute each, 3 GB of disk): the 1.1 GB stream of `/large.html` downloads, the saved file has every sample with the right bytes, the memory of the browser grows by less than 768 MB, and the extension's storage is empty afterwards. Not run by `build.ps1` or in CI.
 - Not covered by any test: how it looks, the toolbar badge, the right-click entry in Chrome, loading the way a user does (Firefox signed install, Chrome Load unpacked).
+
+## 9. M4 checklist: the player capture (experiment)
+
+The feature is off by default. It records what a page's own player plays and joins it into an MP4 (decisions 0009 and 0010). This run decides whether it stays. Do the groups in order; A and B first, on the test page, so that you know the basics work before you go to a real site. Owner's run of 2026-11-14 is in the table (the notes say what was different from the plan). Mark each line, and write anything odd (what the page was doing, what the popup said) in the notes column of the results table.
+
+Real sites: use YouTube (it is on the site list by default) and, if you like, one more site with an ordinary player. Use public videos only. Using this on a site whose terms forbid downloading is your choice (decision 0009).
+
+### Results
+
+| Group | Firefox | Chrome | Notes |
+|---|---|---|---|
+| A. Switches and the popup | pass | pass |  |
+| B. Test page (`/mse.html`) | pass | pass | Includes `?switch=1` and `?eme=1`. |
+| C. A short real video | pass | pass | Real site. Nothing cut off at either end. |
+| D. A long real video | pass | pass | First run: 5:46 video, recording took about 3 min, paced by how fast the player buffers; file about 25 MB; memory stayed flat. A video of 10 minutes or more also passed (owner, 2026-11-14). |
+| E. Quality: locked and switching | pass | pass | Quality kept after the reload; on Auto the player never switched (the refusal is checked on the test page only); a manual change during recording was reported. The popup has no quality choice by design (the quality is the one in the player menu); the top quality is 1080p or lower (owner, 2026-11-14). |
+| F. An advertisement at the start | pass | pass | Pre-roll ads played; the recording took the main video, not the ad. Mid-roll ads not tried (open, left for real use). |
+| G. Pause, seek, speed | pass | pass | Side note: seeking to the end of the grey (buffered) part of the timeline makes the player buffer further and speeds the recording up at any speed. |
+| H. Background tab | pass | pass | Another tab, another window in front, browser minimised: the recording went on as if nothing had happened. No "tab hidden" message needed. |
+| I. Protected video | pass (test page only) | pass (test page only) | `?eme=1` refused. No real DRM page tried (none found; left as is). |
+| J. The files play | pass | pass | Video and `.m4a` in Firefox, WMP and VLC. |
+
+### A. Switches and the popup
+
+- [ ] A fresh profile (or the setting never touched): options page, section "Experimental: record from the player". The box is off, and the list holds `youtube.com`.
+- [ ] With the box off, open YouTube and the popup: there is no "Record this page" section.
+- [ ] Switch it on, reload YouTube, open the popup: the section shows "Record", with a line that the page is reloaded.
+- [ ] Open the popup on a site that is not on the list: no section. Add that site to the list, reload the site: the section appears. Remove the line again: after a reload it is gone.
+- [ ] Switch the box off again, reload YouTube: no section, and the player is offered the usual formats (nothing is hidden from it).
+
+### B. Test page (`/mse.html`, add `127.0.0.1` to the list first)
+
+- [ ] Press Record: the page reloads, the video plays 12 seconds, the section goes from "The video has not started yet..." to "Recording: 0:0x of 0:12." to "The whole video is recorded (0:12)."
+- [ ] "Save" saves `StreamDraft player capture test page [original].mp4`; it has picture and sound. "Save audio only" saves a `.m4a`. A job panel with progress shows while it saves, and it ends with "Saved to your downloads folder."
+- [ ] Close the popup while saving and open it again: the job panel is back and ends the same way.
+- [ ] "Cancel recording": the section goes back to "Record" and Save is gone. Open the popup on another tab: no leftovers.
+- [ ] `/mse.html?switch=1` with Record: the section says the player changed the quality, and Save stays disabled. "Record again" starts over.
+- [ ] `/mse.html?eme=1` with Record: the section says the video is protected, and nothing can be saved.
+
+### C. A short real video (one to two minutes, a plain public video)
+
+- [ ] Open the video page, press Record in the popup. The page reloads. Start the video if it does not start by itself, and leave the tab alone.
+- [ ] The section shows the covered time and a bar that moves while the video plays. At the end it says "The whole video is recorded".
+- [ ] Save. The file name follows your template and the page title. The saved video has the same length as the page says.
+- [ ] Look at the first seconds and the last seconds of the saved video: nothing is cut off at either end.
+
+### D. A long real video (10 minutes or more)
+
+- [ ] Record it to the end. The popup stays correct when you close and open it during the run.
+- [ ] Watch the memory of the browser (Task Manager) now and then: it must not grow with the length of the video (the parts are written to the page's private storage as they come).
+- [ ] The saved file plays to the end, and picture and sound stay together at the end (no drift).
+- [ ] Note the time it took and the size of the file.
+
+### E. Quality: locked and switching
+
+- [ ] Set the quality by hand in the player (for example 720p) before you press Record. The page reloads; check that the player kept the quality, then let it play: the recording completes.
+- [ ] Leave the quality on "Auto" and record a video long enough for the player to switch: either it never switches (fine), or the section says the quality changed and Record again is offered. Note which of the two happened, and what the section said.
+- [ ] Open the player's settings during the recording and change the quality by hand: the section says so, nothing wrong is saved.
+- [ ] The highest quality offered is 1080p or lower (H.264 only; no 4K).
+
+### F. An advertisement at the start
+
+- [ ] If you can, switch your ad blocker off for the site (or use a video that has an ad) and record. Say what the section did while the ad played and after it: it may say "The page started another video. Only the newest one is recorded.", which is fine if the saved file is the real video and not the ad. Anything else, write down.
+- [ ] With the ad blocker on (your normal state), nothing special happens.
+
+### G. Pause, seek, speed
+
+- [ ] Pause in the middle for half a minute, then play: the recording goes on and completes.
+- [ ] Skip forward in the player, then go back to the skipped part and play it: while the part is skipped the section says which part of the video was skipped, and after you have played it, it goes away and "The whole video is recorded" shows.
+- [ ] Set the player speed to 2 (or higher): the recording finishes sooner and is complete. (Firefox kept 8 and 16 times speed in an earlier check; Chrome has not been tried.)
+- [ ] Save before the end: Save is disabled and the section says what is missing.
+
+### H. Background tab (decides whether a "tab hidden" message is needed)
+
+- [ ] Start a recording, switch to another tab for a minute, and come back. Does the video go on, did it stop, is there a gap? What does the section say when you come back? Write the answer in the notes.
+- [ ] Do the same with another window in front of the browser.
+- [ ] Minimise the browser for a minute, come back and look at the section.
+
+### I. Protected video
+
+- [ ] On a page with encrypted media (the Shaka demo's DRM assets, or any site that needs Widevine) press Record: the section says it is protected, and nothing can be saved.
+
+### J. The files play
+
+- [ ] A saved video from groups C and D plays in Firefox, Windows Media Player and VLC (VLC is the strictest). The `.m4a` from "Save audio only" plays in the same three.
+
+### Decision
+
+**Decided by the owner on 2026-11-14: the feature stays, off by default** (an option the user switches on, globally and per site). All groups passed in Firefox and Chrome; the open points (mid-roll ads, real DRM) will be learned from real use.
