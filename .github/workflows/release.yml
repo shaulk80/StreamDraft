@@ -39,11 +39,18 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: packages
-          path: assets
+          path: release-files
 
+      # The folder must not share its name with a folder of the repository (an "assets" folder once
+      # mixed the icon source into the release), so it is checked that it holds exactly the files
+      # that SHA256SUMS.txt lists, and nothing else.
       - name: Verify checksums
-        working-directory: assets
-        run: sha256sum -c SHA256SUMS.txt
+        working-directory: release-files
+        run: |
+          sha256sum -c SHA256SUMS.txt
+          ls -1 | grep -v '^SHA256SUMS.txt$' | LC_ALL=C sort > "$RUNNER_TEMP/present.txt"
+          sed 's/^[0-9a-f]* \*//' SHA256SUMS.txt | LC_ALL=C sort > "$RUNNER_TEMP/listed.txt"
+          diff "$RUNNER_TEMP/listed.txt" "$RUNNER_TEMP/present.txt"
 
       - name: Read version and check it against the tag
         env:
@@ -91,7 +98,7 @@ jobs:
         env:
           WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
           WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
-        run: bash scripts/sign-firefox.sh assets signed
+        run: bash scripts/sign-firefox.sh release-files signed
 
       # Kept even when a later step fails: a version already signed cannot be signed again.
       - name: Keep the signed Firefox package
@@ -108,7 +115,7 @@ jobs:
         with:
           name: release-preview
           path: |
-            assets/*
+            release-files/*
             notes.md
           retention-days: 14
 
@@ -121,7 +128,7 @@ jobs:
           case "$VERSION" in
             *-*|0.0.*) prerelease="--prerelease" ;;
           esac
-          gh release create "$GITHUB_REF_NAME" assets/* \
+          gh release create "$GITHUB_REF_NAME" release-files/* \
             --draft \
             --title "StreamDraft $VERSION" \
             --notes-file notes.md \
