@@ -90,7 +90,17 @@ Tasks (written 2026-11-13, work in this order, one commit per task):
 
 Goal: a user can install from GitHub Releases and receive updates.
 
-To check in this milestone: the source-upload option of `web-ext sign` (can Mozilla take WXT's sources zip as the source code of a bundled build; see `docs/architecture.md`, item 7).
+To check in this milestone: the source-upload option of `web-ext sign` (can Mozilla take WXT's sources zip as the source code of a bundled build; see `docs/architecture.md`, item 7). Found on 2026-11-14: web-ext 10.8 has `--upload-source-code <archive>`; what is left is to try it with the real sources zip.
+
+Owner gates (nothing below can finish without them): an AMO account with API credentials (JWT issuer and secret) stored as repository secrets `AMO_JWT_ISSUER` and `AMO_JWT_SECRET`; GitHub Pages enabled for the repo (source: GitHub Actions) for the update manifest. Neither exists yet (checked 2026-11-14: no secrets, Pages returns 404).
+
+Tasks (written 2026-11-14, work in this order, one commit per task):
+1. Decision 0011: where the update manifest lives (GitHub Pages, `https://shaulk80.github.io/StreamDraft/updates.json`), how it is built from a release, and what Chrome users do (manual update from the zip; no store, no auto-update).
+2. Update manifest generator: a script plus unit tests that turn the version, add-on ID and the `.xpi` release URL and hash into `updates.json`; `update_url` added to the Firefox manifest in `wxt.config.ts` only.
+3. Signing step in `release.yml`: `web-ext sign --channel unlisted --upload-source-code` with the sources zip; skipped with a warning when the secrets are missing; the signed `.xpi` joins the assets and `SHA256SUMS.txt`.
+4. Publishing the update manifest from the release workflow to Pages (after the owner publishes the draft, or on the tag run; decided in task 1).
+5. README install steps for Firefox (signed `.xpi`, updates) and Chrome (unpacked, manual update); `docs/manual-testing.md` section for the install and update check.
+6. Dry run of `release.yml`, then `0.1.0`: the owner pushes the tag and publishes the draft; check install from the `.xpi` in release Firefox and an update from 0.1.0 to a later test version.
 
 Done when: `release.yml` signs the Firefox build on AMO as unlisted using repository secrets (skipped with a warning when secrets are missing); `update_url` and the update manifest are hosted; the release carries signed `.xpi`, Chrome zip, sources zip and `SHA256SUMS.txt`; the install steps for both browsers are in the README; first real release `0.1.0`.
 

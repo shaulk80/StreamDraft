@@ -279,3 +279,47 @@ Real sites: use YouTube (it is on the site list by default) and, if you like, on
 ### Decision
 
 **Decided by the owner on 2026-11-14: the feature stays, off by default** (an option the user switches on, globally and per site). All groups passed in Firefox and Chrome; the open points (mid-roll ads, real DRM) will be learned from real use.
+
+## 10. M5 checklist: install and update (from a real release)
+
+Tests what a user does, with files from the Releases page and not from your own build. It needs two published releases, because an update needs a newer version to find: `0.1.0` and a later test version (such as `0.1.1`) that you publish only for this check. Setup that only you can do: the AMO secrets, Pages enabled with GitHub Actions as the source (`docs/plan.md`, M5). Use Firefox release (not Developer Edition) for group B, so that the signature is really checked. Results go in the table; write what the browser said word for word when something is odd.
+
+### Results
+
+| Group | Firefox | Chrome | Notes |
+|---|---|---|---|
+| A. The release page and its files | | n/a | |
+| B. Install in Firefox | | n/a | |
+| C. Update in Firefox | | n/a | |
+| D. Install and update in Chrome | n/a | | |
+| E. The update manifest | | n/a | |
+
+### A. The release page and its files
+
+- [ ] The release has the signed `.xpi`, the Chrome zip, the sources zip and `SHA256SUMS.txt`, and no unsigned Firefox zip.
+- [ ] `Get-FileHash -Algorithm SHA256` of each downloaded file matches its line in `SHA256SUMS.txt`.
+
+### B. Install in Firefox
+
+- [ ] Click the `.xpi` on the Releases page. Firefox asks to add the extension and lists the permissions (read your data on all sites, downloads, and so on). Write down if it is saved instead of installed (then use "Install Add-on From File...").
+- [ ] After **Add**, `about:addons` shows StreamDraft with no "could not be verified" or "corrupt" warning. The extension's page shows version `0.1.0`.
+- [ ] Open `pnpm run testpage` (or any page with a video): the popup lists the video and the download works.
+- [ ] Restart Firefox: the extension is still there and its settings (Options) are as you left them.
+
+### C. Update in Firefox
+
+- [ ] With `0.1.0` installed, publish the later test version. The "Update manifest" workflow succeeds, and `https://shaulk80.github.io/StreamDraft/updates.json` lists the new version (group E).
+- [ ] In `about:addons` choose the gear, **Check for Updates**. The extension updates to the new version without a prompt (or with one; write down which). Its settings are kept.
+- [ ] Leave Firefox open for a day, or restart it, on a second profile with `0.1.0`: it updates on its own.
+- [ ] Switch **Automatic Updates** off for the extension: a published newer version is not installed by itself.
+
+### D. Install and update in Chrome
+
+- [ ] Unzip the Chrome zip into a folder and **Load unpacked** from `chrome://extensions`: the popup lists a video and the download works.
+- [ ] Change a setting. Unzip the later version over the same folder, click reload on the extension's card: the new version number shows and the setting is still there.
+
+### E. The update manifest
+
+- [ ] `updates.json` opens in the browser, lists one version, and its `update_link` opens (redirects to a download) the `.xpi` of that release.
+- [ ] Its `update_hash` equals the hash of that `.xpi` in `SHA256SUMS.txt`.
+- [ ] Publishing a pre-release does not change `updates.json`.
