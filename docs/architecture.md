@@ -42,7 +42,7 @@ Stored in `storage.sync` (falls back to `local`). The background rebuilds the co
 4. **Site extractors.** YouTube needs data from the page's own JS (and the player's signature code), so it runs in the MAIN world of the page. **Verify** Firefox MAIN-world content scripts. This is the highest-risk part: it breaks whenever the site changes, may conflict with store reviewer expectations, and sits behind the M4 gate.
 5. **Permissions.** `webRequest` (observe only), `downloads`, `contextMenus`, `storage`, `activeTab`, plus host access to all sites for detection. Firefox shows host access at install. Request the minimum and explain each in the README.
 6. **Lifetime.** Both background types can be suspended. Keep the registry in `storage.session` and job state in `storage.local`; never rely on module variables.
-7. **Signing and source review.** Mozilla may ask for the source of a bundled build; WXT's sources zip is released with each version. **Verify** the `web-ext sign` option for source upload in M5.
+7. **Signing and source review.** Mozilla may ask for the source of a bundled build; WXT's sources zip is released with each version and is uploaded with `web-ext sign --upload-source-code`; Mozilla accepted it for `0.1.0` and `0.1.1` (decision 0011).
 
 ## Out of scope
 

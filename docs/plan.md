@@ -104,6 +104,8 @@ Tasks (written 2026-11-14, work in this order, one commit per task):
 
 Done when: `release.yml` signs the Firefox build on AMO as unlisted using repository secrets (skipped with a warning when secrets are missing); `update_url` and the update manifest are hosted; the release carries signed `.xpi`, Chrome zip, sources zip and `SHA256SUMS.txt`; the install steps for both browsers are in the README; first real release `0.1.0`.
 
+Result (2026-11-14): done. `v0.1.0` and `v0.1.1` were signed by AMO, the update from 0.1.0 to 0.1.1 works in Firefox and Chrome (owner). Mozilla accepted WXT's sources zip, so the question of architecture item 7 is answered. Decision 0011 has the details.
+
 ## M6: hardening
 
 Goal: reliable enough for daily use.
