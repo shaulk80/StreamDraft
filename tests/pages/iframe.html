@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>StreamDraft iframe test page</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      iframe { display: block; border: 2px dashed #888; margin: 1rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>StreamDraft iframe test page</h1>
+    <p>
+      The video below sits in an iframe, as an embedded player does. Known limit (M1): the in-page button
+      does not appear for a video inside an iframe, because the content script runs in the top page only.
+      Check what the popup and the right-click entry do for it, and whether the video is listed.
+    </p>
+    <h2>Same-origin iframe</h2>
+    <iframe id="inner" src="/" width="700" height="520" allowfullscreen></iframe>
+
+    <h2>Cross-origin iframe (localhost instead of 127.0.0.1)</h2>
+    <iframe id="cross" src="http://localhost:8123/" width="700" height="520" allowfullscreen></iframe>
+  </body>
+</html>

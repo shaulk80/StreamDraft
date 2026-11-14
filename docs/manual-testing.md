@@ -39,6 +39,7 @@ Leave it running. Pages, all on `http://127.0.0.1:8123/`:
 | Page | Address | For |
 |---|---|---|
 | Overlay page | `/` | the in-page button and the right-click entry |
+| Iframe page | `/iframe.html` | the overlay page inside an iframe (same-origin and cross-origin): the in-page button does not appear there, which is a known limit; checked by the owner on 2026-11-14, as is the missing button in fullscreen |
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
 | Silent stream page | `/silent.html` | a stream with a picture and no sound track: "Audio only" must fail with a clear message (M3) |
