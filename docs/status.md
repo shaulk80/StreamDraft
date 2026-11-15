@@ -10,8 +10,8 @@ Hand-test results per milestone: `docs/manual/`. Closed milestones: `docs/plan.m
 
 ## Next
 
-- M6, hardening (`docs/plan.md`), including the product-basics check.
-- Fix the two flaky Firefox smoke checks (#31, #34) before M6 adds more checks.
+- M6, hardening: the task list is in `docs/plan.md` (7 tasks, including the product-basics check). #21 (`Referer`) is left out of M6.
+- Task 1: fix the two flaky Firefox smoke checks (#31, #34) before M6 adds more checks.
 
 ## Open
 
