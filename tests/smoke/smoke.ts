@@ -17,6 +17,7 @@ import {
   STREAM_PAGE,
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
+import { JobStorage } from './job-storage.ts';
 import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
 import {
@@ -565,10 +566,13 @@ async function checkJobs(driver: firefox.Driver, pageUrl: string): Promise<void>
       await twoStreams();
     },
   };
-  const found = await checkJobDisplay(popup);
+  const storage = new JobStorage((expression) =>
+    driver.executeAsyncScript<unknown>(`const done = arguments[arguments.length - 1]; (${expression}).then(done, (error) => done('error: ' + String(error)));`),
+  );
+  const found = await checkJobDisplay(popup, storage);
   found.forEach((problem) => problems.push(`firefox runtime: job display: ${problem}`));
   if (found.length === 0) {
-    console.log('Firefox runtime: job display: a slow stream showed its progress (also in a popup opened again) and was cancelled, a stream with a missing part ended with the failure text');
+    console.log('Firefox runtime: job display: a slow stream showed its progress (also in a popup opened again) and was cancelled, a stream with a missing part ended with the failure text; a leftover job folder was removed by the next job and none was left after the cancel or the failure');
   }
 }
 
