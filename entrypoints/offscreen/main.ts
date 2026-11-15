@@ -13,6 +13,8 @@ const engine = createBrowserEngine((signal) => {
 
 browser.runtime.onMessage.addListener(createEngineListener(engine));
 
-// The document is created for a job and closed when none is left, so a folder found now was left by a
-// document that was closed in the middle of a job, or by a crash. (The sweep logs its own failures.)
-void engine.sweep();
+// The document is created for a job (or, at the start of the background, to clean up after a crash) and
+// closed when none is left, so a folder found now was left by a document that was closed in the middle
+// of a job, or by a crash. The sweep logs its own failures; the idle news lets the background close
+// a document that was opened only for it.
+void engine.sweepOnStartup();

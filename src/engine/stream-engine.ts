@@ -87,6 +87,16 @@ export class StreamEngine {
   }
 
   /**
+   * For a new engine: the sweep, then the news that it holds nothing, so a document that was opened
+   * only to clean up (Chrome, see `OffscreenEngineHost.sweepLeftovers`) can be closed again.
+   */
+  async sweepOnStartup(): Promise<Result<number>> {
+    const swept = await this.sweep();
+    this.announceIdle();
+    return swept;
+  }
+
+  /**
    * Removes the job folders no job of this engine holds: what a stopped page, a crash or a failed
    * removal left behind. A new engine holds nothing, so at its start every folder is such a leftover.
    * Gives the number of folders removed.

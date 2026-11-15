@@ -1,6 +1,7 @@
 import { fail, ok, type Result } from '../core/result.ts';
 import { engineCommandMessage, type EngineCommand } from './engine-messages.ts';
 import type { EngineEvent, EngineHost, EngineJob, EngineSignal } from './engine-types.ts';
+import type { JobFolders } from './opfs-job-folders.ts';
 
 /** The browser calls the offscreen host needs; the service worker has no DOM, so the engine lives in a document of its own. */
 export interface OffscreenApi {
@@ -32,6 +33,8 @@ export class OffscreenEngineHost implements EngineHost {
   private opening: Promise<Result<void>> | undefined;
   /** Counts the jobs started, so a document that was just given work is not closed as idle. */
   private starts = 0;
+  /** Jobs whose start command is on its way: a document that says it is idle meanwhile is about to get work. */
+  private starting = 0;
 
   constructor(
     private readonly api: OffscreenApi,
@@ -40,11 +43,16 @@ export class OffscreenEngineHost implements EngineHost {
 
   async start(job: EngineJob): Promise<Result<void>> {
     this.starts++;
-    const ready = await this.ensureDocument();
-    if (!ready.ok) {
-      return ready;
+    this.starting++;
+    try {
+      const ready = await this.ensureDocument();
+      if (!ready.ok) {
+        return ready;
+      }
+      return await this.send({ kind: 'start', job });
+    } finally {
+      this.starting--;
     }
-    return this.send({ kind: 'start', job });
   }
 
   async cancel(jobId: string): Promise<void> {
@@ -53,6 +61,29 @@ export class OffscreenEngineHost implements EngineHost {
 
   async release(jobId: string): Promise<void> {
     await this.send({ kind: 'release', jobId });
+  }
+
+  /**
+   * For the start of the background: the engine lives in a document that exists only while a job runs, so
+   * what a crash or a closed browser left in storage is cleaned only if a document is opened for it. That
+   * is done when job folders exist and no document does (so no job is running); the document sweeps when
+   * it loads and reports that it is idle, which closes it. Listing is cheap, the background starts often.
+   */
+  async sweepLeftovers(folders: Pick<JobFolders, 'list'>): Promise<Result<void>> {
+    try {
+      if (await this.api.hasDocument()) {
+        return ok(undefined);
+      }
+    } catch (error) {
+      console.error('StreamDraft: could not look for the offscreen document', error);
+      return fail(UNAVAILABLE);
+    }
+
+    const listed = await folders.list();
+    if (!listed.ok || listed.value.length === 0) {
+      return listed.ok ? ok(undefined) : fail(listed.error);
+    }
+    return this.ensureDocument();
   }
 
   /** Takes what the document reported: events go on to the coordinator; "idle" closes the document if it really is. */
@@ -65,6 +96,10 @@ export class OffscreenEngineHost implements EngineHost {
   }
 
   private async closeIfIdle(): Promise<void> {
+    if (this.starting > 0) {
+      return;
+    }
+
     const startsBefore = this.starts;
     const answer = asAnswer(await this.ask({ kind: 'status' }));
     if (answer.ok !== true || answer.value !== 0 || this.starts !== startsBefore) {
