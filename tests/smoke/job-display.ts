@@ -1,6 +1,8 @@
 // The popup's job display, checked the same way in Firefox (WebDriver) and Chrome (DevTools).
 // The page /jobs.html has a slow stream (card 0) and a broken one (card 1).
 
+import type { JobStorage } from './job-storage.ts';
+
 export const JOBS_PAGE = 'jobs.html';
 const POLL_MS = 100;
 const JOB_WAIT_MS = 20_000;
@@ -77,11 +79,22 @@ export async function waitForCard(popup: PopupPage, card: number, accept: (view:
  * Walks the popup through what a user sees of a stream job: progress (and the job found again when
  * the popup is opened anew), Cancel, and the words for a failure. Returns what went wrong.
  */
-export async function checkJobDisplay(popup: PopupPage): Promise<string[]> {
+export async function checkJobDisplay(popup: PopupPage, storage: JobStorage): Promise<string[]> {
+  // A job folder an earlier run was cut off in: starting the next job must remove it.
+  if (!(await storage.plantStray())) {
+    return ['could not leave a job folder in the extension\'s storage to see it removed'];
+  }
+
   await popup.act(cardButtonScript(SLOW_CARD, '.download'));
   const fetching = await waitForCard(popup, SLOW_CARD, (view) => FETCHING.test(view.text) && (view.progress ?? 0) > 0);
   if (!fetching || !FETCHING.test(fetching.text) || !fetching.downloadDisabled || !fetching.cancelVisible) {
     return [`the slow stream showed no progress with a Cancel button: ${JSON.stringify(fetching)}`];
+  }
+
+  // Segments are being stored: the folder of this job, and not the planted one.
+  const whileFetching = await storage.settleAt(1);
+  if (whileFetching !== 1) {
+    return [`while the slow stream was fetched the storage held ${String(whileFetching)} job folders, expected 1 (its own; the leftover one removed)`];
   }
 
   await popup.reload();
@@ -95,11 +108,19 @@ export async function checkJobDisplay(popup: PopupPage): Promise<string[]> {
   if (cancelled?.text !== 'Cancelled.' || cancelled.downloadDisabled || cancelled.cancelVisible) {
     return [`Cancel did not end the job as cancelled: ${JSON.stringify(cancelled)}`];
   }
+  const afterCancel = await storage.settleAt(0);
+  if (afterCancel !== 0) {
+    return [`after Cancel the storage still held ${String(afterCancel)} job folders, expected none`];
+  }
 
   await popup.act(cardButtonScript(BROKEN_CARD, '.download'));
   const failed = await waitForCard(popup, BROKEN_CARD, (view) => view.text.startsWith('Could not save the video.') && !view.downloadDisabled);
   if (!failed?.text.startsWith('Could not save the video.') || !failed.text.includes('The server answered 404.') || failed.downloadDisabled) {
     return [`the broken stream did not end with the failure text: ${JSON.stringify(failed)}`];
+  }
+  const afterFailure = await storage.settleAt(0);
+  if (afterFailure !== 0) {
+    return [`after the failed job the storage still held ${String(afterFailure)} job folders, expected none`];
   }
   return [];
 }

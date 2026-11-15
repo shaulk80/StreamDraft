@@ -5,8 +5,11 @@ import { CANCELLED_MESSAGE } from '../../src/engine/cancelled.ts';
 import type { EngineJob, EngineSignal } from '../../src/engine/engine-types.ts';
 import type { FetchSegment } from '../../src/engine/segment-fetcher.ts';
 import { StreamEngine, type StreamEngineDeps } from '../../src/engine/stream-engine.ts';
+import { OpfsJobFolders } from '../../src/engine/opfs-job-folders.ts';
+import { JOBS_DIRECTORY } from '../../src/engine/opfs-store.ts';
+import { FakeDirectory } from './fake-opfs.ts';
 import { readFlatMp4 } from './flat-mp4-reader.ts';
-import { MemoryJobFiles } from './memory-job-files.ts';
+import { MemoryJobFiles, type MemoryFinishedOutput } from './memory-job-files.ts';
 import { initSegment, mediaSegment, type FixtureTrack } from './mp4-fixtures.ts';
 import { recordingFixture, type RecordingFixture } from './recording-fixtures.ts';
 
@@ -85,8 +88,8 @@ class Recorder {
   }
 }
 
-function setup(overrides: Partial<StreamEngineDeps> = {}, served: Map<string, Uint8Array> = cdnFiles()) {
-  const files = new MemoryJobFiles();
+function setup(overrides: Partial<StreamEngineDeps> = {}, served: Map<string, Uint8Array> = cdnFiles(), files: MemoryJobFiles = new MemoryJobFiles()) {
+  const storage = new FakeDirectory();
   const recorder = new Recorder();
   const revoked: string[] = [];
   const types: string[] = [];
@@ -96,6 +99,7 @@ function setup(overrides: Partial<StreamEngineDeps> = {}, served: Map<string, Ui
   };
   const engine = new StreamEngine({
     openFiles: () => Promise.resolve(ok(files)),
+    jobFolders: new OpfsJobFolders(() => Promise.resolve(ok(storage))),
     fetchText: (url) => Promise.resolve(url === ITEM.url ? ok({ text: MANIFEST, url }) : fail('The stream\'s playlist could not be loaded.')),
     fetchSegment,
     createObjectUrl: (file, mimeType) => {
@@ -106,7 +110,45 @@ function setup(overrides: Partial<StreamEngineDeps> = {}, served: Map<string, Ui
     notify: recorder.record,
     ...overrides,
   });
-  return { engine, files, recorder, revoked, types };
+  return { engine, files, recorder, revoked, types, storage };
+}
+
+/** Puts job folders into the fake storage the way earlier jobs left them. */
+async function leaveFolders(storage: FakeDirectory, ...jobIds: string[]): Promise<void> {
+  const jobs = await storage.getDirectoryHandle(JOBS_DIRECTORY, { create: true });
+  for (const jobId of jobIds) {
+    await jobs.getDirectoryHandle(jobId, { create: true });
+  }
+}
+
+function leftFolders(storage: FakeDirectory): string[] {
+  return [...(storage.directories.get(JOBS_DIRECTORY)?.directories.keys() ?? [])];
+}
+
+/** Like the real fetcher: never answers until aborted, and notices a signal that is aborted already. */
+const HANGING: FetchSegment = (_request, signal) =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(fail(CANCELLED_MESSAGE));
+      return;
+    }
+    signal.addEventListener('abort', () => resolve(fail(CANCELLED_MESSAGE)), { once: true });
+  });
+
+/** Files whose output breaks in the middle of the join, the way an unexpected error would. */
+class BreakingFiles extends MemoryJobFiles {
+  output: MemoryFinishedOutput | undefined;
+
+  override async createOutput(name: string) {
+    const created = await super.createOutput(name);
+    if (created.ok) {
+      this.output = created.value;
+      created.value.append = () => {
+        throw new Error('boom');
+      };
+    }
+    return created;
+  }
 }
 
 describe('StreamEngine', () => {
@@ -183,17 +225,21 @@ describe('StreamEngine', () => {
     expect(files.cleared).toBe(true);
   });
 
+  test('an error in the middle of the join drops the output file, so the folder can be removed', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const files = new BreakingFiles();
+    const { engine, recorder } = setup({}, cdnFiles(), files);
+
+    engine.start(JOB);
+    await recorder.waitFor('idle');
+
+    expect(recorder.finishedResult()).toEqual({ ok: false, error: 'The download stopped unexpectedly.' });
+    expect(files.output?.aborted).toBe(true);
+    expect(files.cleared).toBe(true);
+  });
+
   test('cancel stops the fetching and ends as cancelled', async () => {
-    // Like the real fetcher: never answers until aborted, and notices a signal that is aborted already.
-    const hanging: FetchSegment = (_request, signal) =>
-      new Promise((resolve) => {
-        if (signal.aborted) {
-          resolve(fail(CANCELLED_MESSAGE));
-          return;
-        }
-        signal.addEventListener('abort', () => resolve(fail(CANCELLED_MESSAGE)), { once: true });
-      });
-    const { engine, files, recorder } = setup({ fetchSegment: hanging });
+    const { engine, files, recorder } = setup({ fetchSegment: HANGING });
 
     engine.start(JOB);
     await recorder.waitFor('progress');
@@ -373,5 +419,60 @@ describe('StreamEngine with a recording', () => {
 
     expect(recorder.finishedResult()).toEqual({ ok: false, error: CANCELLED_MESSAGE });
     expect(files.cleared).toBe(true);
+  });
+});
+
+describe('StreamEngine sweep', () => {
+  test('removes the folders no job holds, and keeps the folder of a running job', async () => {
+    const { engine, storage, recorder } = setup({ fetchSegment: HANGING });
+    await leaveFolders(storage, 'old1', 'old2', 'job1');
+
+    engine.start(JOB);
+    await recorder.waitFor('progress');
+    const swept = await engine.sweep();
+
+    expect(swept).toEqual({ ok: true, value: 2 });
+    expect(leftFolders(storage)).toEqual(['job1']);
+    engine.cancel('job1');
+    await recorder.waitFor('idle');
+  });
+
+  test('starting a job removes what an earlier one left', async () => {
+    const { engine, storage, recorder } = setup();
+    await leaveFolders(storage, 'old1');
+
+    engine.start(JOB);
+    await recorder.waitFor('finished');
+
+    await vi.waitFor(() => expect(leftFolders(storage)).toEqual([]));
+  });
+
+  test('a folder that cannot be removed is logged and the others still go', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const removed: string[] = [];
+    const jobFolders = {
+      list: () => Promise.resolve(ok(['stuck', 'free'])),
+      remove: (jobId: string) => {
+        if (jobId === 'stuck') {
+          return Promise.resolve(fail('locked'));
+        }
+        removed.push(jobId);
+        return Promise.resolve(ok(undefined));
+      },
+    };
+    const { engine } = setup({ jobFolders });
+
+    const swept = await engine.sweep();
+
+    expect(swept).toEqual({ ok: true, value: 1 });
+    expect(removed).toEqual(['free']);
+    expect(logged).toHaveBeenCalledOnce();
+  });
+
+  test('a listing that fails is reported', async () => {
+    const jobFolders = { list: () => Promise.resolve(fail('no listing')), remove: () => Promise.resolve(ok(undefined)) };
+    const { engine } = setup({ jobFolders });
+
+    expect(await engine.sweep()).toEqual({ ok: false, error: 'no listing' });
   });
 });

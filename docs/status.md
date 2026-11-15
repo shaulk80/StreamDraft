@@ -11,7 +11,9 @@ Hand-test results per milestone: `docs/manual/`. Closed milestones: `docs/plan.m
 ## Next
 
 - M6, hardening: the task list is in `docs/plan.md` (7 tasks, including the product-basics check). #21 (`Referer`) is left out of M6.
-- Task 3: storage cleanup (#22). Done: task 1 (flaky smoke checks #31 and #34, fixed in the test; 10 of 10 local runs) and task 2 (version in the popup and Options, About section, README Privacy and Permissions, `docs/store-listing.md`, hand-test group A in `docs/manual/m6.md`).
+- Done: task 1 (flaky smoke checks #31 and #34, fixed in the test; 10 of 10 local runs) and task 2 (version in the popup and Options, About section, README Privacy and Permissions, `docs/store-listing.md`, hand-test group A in `docs/manual/m6.md`, passed by the owner on 2026-11-15).
+- Task 3, storage cleanup (#22), in review: the engine sweeps job folders no job holds when it starts and before each job; an output left open by an unexpected error is aborted so the folder can be removed. Smoke checks (both browsers) show empty storage after a cancel and a failed job. The cause of the 2.2 GB in #22 is not proven; hand-test group B (browser killed mid-job) is open.
+- Next: task 4, errors in plain words, cancel and retry.
 
 ## Open
 

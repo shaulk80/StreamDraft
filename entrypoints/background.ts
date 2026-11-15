@@ -15,6 +15,7 @@ import { DownloadHandoffs, JobCoordinator } from '../src/engine/job-coordinator.
 import { JobStateStore } from '../src/engine/job-state.ts';
 import { LocalEngineHost } from '../src/engine/local-engine-host.ts';
 import { OffscreenEngineHost, type OffscreenApi } from '../src/engine/offscreen-engine-host.ts';
+import type { StreamEngine } from '../src/engine/stream-engine.ts';
 import { NetworkObserver, type TabInfo } from '../src/detect/network-observer.ts';
 import { createManifestFetcher } from '../src/detect/manifest-fetch.ts';
 import { addPageCandidates } from '../src/detect/page-reports.ts';
@@ -55,15 +56,7 @@ export default defineBackground(() => {
   // document on Chrome (decision 0003). Its news comes back as events.
   const onEngineEvent = (event: EngineEvent): void => void coordinator.handleEvent(event);
   const offscreenHost = import.meta.env.FIREFOX ? undefined : new OffscreenEngineHost(createOffscreenApi(), onEngineEvent);
-  const engineHost: EngineHost =
-    offscreenHost ??
-    new LocalEngineHost(
-      createBrowserEngine((signal) => {
-        if (signal.kind !== 'idle') {
-          onEngineEvent(signal);
-        }
-      }),
-    );
+  const engineHost: EngineHost = offscreenHost ?? new LocalEngineHost(createLocalEngine());
   const coordinator = new JobCoordinator({
     host: engineHost,
     downloads: browser.downloads,
@@ -170,6 +163,17 @@ export default defineBackground(() => {
     }
     void answerMenuClick(tab.id, info.srcUrl);
   });
+
+  /** Firefox: the engine of this page. A page that starts holds no job, so what an earlier one left in storage is removed. */
+  function createLocalEngine(): StreamEngine {
+    const engine = createBrowserEngine((signal) => {
+      if (signal.kind !== 'idle') {
+        onEngineEvent(signal);
+      }
+    });
+    void engine.sweep();
+    return engine;
+  }
 
   /** Finds videos from the network traffic of every tab and keeps them per tab. */
   function registerDetection(): void {
