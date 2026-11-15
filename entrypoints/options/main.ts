@@ -8,6 +8,7 @@ import {
   type OptionsControls,
 } from '../../src/ui/options-form.ts';
 import { SettingsStore } from '../../src/ui/settings-store.ts';
+import { PERMISSIONS_URL, PRIVACY_URL, versionLabel } from '../../src/ui/about.ts';
 
 // Saves finish in their own time. Only the latest edit may write the status,
 // or a slow save of an older value would say "Saved." beside a newer bad value.
@@ -35,7 +36,17 @@ async function saveFromForm(store: SettingsStore, controls: OptionsControls): Pr
   showStatus(controls, saved.error, true);
 }
 
+function showAbout(): void {
+  const version = document.getElementById('version');
+  if (version) {
+    version.textContent = versionLabel(browser.runtime.getManifest().version);
+  }
+  document.getElementById('privacy-link')?.setAttribute('href', PRIVACY_URL);
+  document.getElementById('permissions-link')?.setAttribute('href', PERMISSIONS_URL);
+}
+
 async function start(): Promise<void> {
+  showAbout();
   const controls = findControls(document);
   if (!controls) {
     return;

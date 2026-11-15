@@ -12,6 +12,8 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: 'StreamDraft',
     description: 'Download videos from the page you are on.',
+    // Shown by Firefox on the extension's page in about:addons.
+    homepage_url: 'https://github.com/shaulk80/StreamDraft',
     permissions: [
       'storage',
       'contextMenus',

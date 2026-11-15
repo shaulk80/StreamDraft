@@ -8,7 +8,7 @@ Early development (version 0.x). It finds direct video and audio files (mp4, web
 
 ## Installing
 
-Every release is on the [Releases page](https://github.com/shaulk80/StreamDraft/releases). Download only from there. `SHA256SUMS.txt` lists the hash of each file; to check one in PowerShell: `Get-FileHash -Algorithm SHA256 .streamdraft-<version>-firefox.xpi` and compare.
+Every release is on the [Releases page](https://github.com/shaulk80/StreamDraft/releases). Download only from there. `SHA256SUMS.txt` lists the hash of each file; to check one in PowerShell: `Get-FileHash -Algorithm SHA256 .\streamdraft-<version>-firefox.xpi` and compare.
 
 ### Firefox (primary)
 
@@ -24,11 +24,36 @@ The `.xpi` is signed by Mozilla as a self-distributed (unlisted) add-on. It is n
 
 There is no Chrome store listing and no automatic update.
 
-1. Download `streamdraft-<version>-chrome.zip` from the Releases page and unzip it into a folder you keep, such as `C:ToolsStreamDraft`.
+1. Download `streamdraft-<version>-chrome.zip` from the Releases page and unzip it into a folder you keep, such as `C:\Tools\StreamDraft`.
 2. Open `chrome://extensions`, turn on **Developer mode** and choose **Load unpacked**, then pick that folder.
 3. Chrome reminds you at startup that a developer-mode extension is loaded.
 
 **Updates.** Download the newer zip, unzip it into the same folder (replace the files), then click the reload arrow on the extension's card in `chrome://extensions`. Keeping the folder keeps the extension's settings.
+
+## Privacy
+
+StreamDraft collects no data. It has no server, no account, no analytics and no crash reports, and the Firefox manifest says so (`data_collection_permissions: none`).
+
+- **What it looks at.** The headers of the requests a page makes (to find videos), the page's `<video>` and `<audio>` elements, and the page's address and title (for the list and the file name). Only when the experimental player capture is on for a site, it also reads the video the page plays and a variable of the page's own scripts that holds the player data.
+- **What it keeps.** Found videos are kept per tab until the browser closes. The title and progress of each download are kept in the extension's local storage, so the popup can show them. Your settings are kept in the browser's extension storage (`storage.sync`): if you turned on sync in your browser, the browser may sync them with your browser account, as it does for other extensions; StreamDraft itself sends them nowhere. While a stream is being joined, its parts are written to the extension's private browser storage and removed when the job ends or is cancelled (a rare leftover is issue #22).
+- **What goes over the network.** Requests for the video, its playlist and its segments, to the sites that host them, with the cookies your browser would send to them. Nothing else. Firefox's own check for a newer version is described under Installing.
+- **Where files go.** Into your browser's downloads folder, like any other download.
+
+## Permissions
+
+What the extension asks for, and why. Firefox shows the first line as "Access your data for all websites" when you install.
+
+| Permission | Why |
+|---|---|
+| Access to all websites | It has to see which video files a page loads, on any site, to list them, and to put the download button on videos on any page. You cannot know in advance which site you will want it on, so it cannot wait for a click. |
+| `webRequest` | To watch the headers (content type, size) of the requests a page makes. It only observes: it never blocks, redirects or changes a request. |
+| `downloads` | To save the finished file in your downloads folder. |
+| `storage` | To keep your settings and the list of videos found on each tab. |
+| `contextMenus` | For the "Download video" entry of the right-click menu. Switch it off in Options. |
+| `scripting` | For the experimental player capture only: while it is on, the extension adds a script to the sites you listed. |
+| `offscreen` (Chrome only) | Chrome has no page in the background to join a stream in, so the extension opens a hidden one. |
+
+The reasoning for the first two is in `docs/decisions/0002-detection-permissions.md`.
 
 ## Building
 
