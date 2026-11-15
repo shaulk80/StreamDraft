@@ -41,8 +41,11 @@ SMOKE_LARGE=1 pnpm run smoke[:chrome] adds the large file check: a 1.1 GB genera
 - No remotely hosted code and no `eval`: both stores forbid it. All libraries are bundled.
 - No DRM circumvention. Protected streams are detected and reported as unsupported.
 - No telemetry, no external servers. Network calls go only to the media hosts the user is downloading from.
+- Commit messages and PR descriptions: no `Co-Authored-By` and no "Generated with Claude Code" line (owner rule; overrides defaults). `.claude/settings.json` sets `attribution` to empty so Claude Code does not add them.
 - Commits: Conventional Commits, `type(scope): summary`, one logical change per commit. Commit per task, not per milestone.
-- Tests run in CI on Windows. Coverage is a warning, never a gate.
+- Tests run in CI on Windows. Coverage is a warning, never a gate. A flaky check gets one retry in its script (logged) and an issue; fix it before the next milestone.
+- One task per pull request, about 800 changed lines or fewer (tests and generated files not counted).
+- A problem that passes about 60 tool calls with no result: stop, write what was learned to `docs/spikes/<name>.md`, and recommend that the user start a fresh session.
 
 ## Git and CI
 
@@ -53,10 +56,12 @@ SMOKE_LARGE=1 pnpm run smoke[:chrome] adds the large file check: a 1.1 GB genera
 ## Environment
 
 - Windows 10. Default shell PowerShell 5.1 (scripts must also run on pwsh 7); Git Bash available. Keep `.ps1` files ASCII.
-- Installed: git 2.33, gh (logged in as shaulk80), Node 26 (`C:\Service\NodeJs`), pnpm 12 (via `npm install -g pnpm`; Node 26 has no corepack), Firefox and Firefox Developer Edition. NOT installed: winget, pwsh 7, WSL. After an install, refresh PATH in the session from the Machine and User environment variables.
+- Installed: git 2.33, gh (logged in as shaulk80), Node 26 (`C:\Service\NodeJs`), pnpm 12 (via `npm install -g pnpm`; Node 26 has no corepack), Firefox and Firefox Developer Edition. NOT installed: winget, pwsh 7, WSL. After an install, refresh PATH in the session with `. .\scripts\env.ps1`.
 
 ## Gotchas
 
+- Edit files with the Edit and Write tools, never with shell heredocs (quoting breaks on Windows). Run Node and pnpm in PowerShell, not Git Bash.
+- Never delete with a glob after `cd` (the safety check blocks it); name a new empty folder instead.
 - Paths: do not hardcode `\` or `/`; sort directory listings; `.gitattributes` forces LF.
 - Pin runner images (`windows-2022`, `ubuntu-24.04`), not `-latest`.
 - A called workflow shares `github.workflow` with its caller, so `ci.yml` prefixes its concurrency group with `ci-`.
@@ -74,14 +79,15 @@ SMOKE_LARGE=1 pnpm run smoke[:chrome] adds the large file check: a 1.1 GB genera
 
 - Build has no warnings; tests pass in CI.
 - The changed feature was run (loaded in Firefox, or a smoke/integration test), and the summary lists what was exercised.
-- PR description: what, why, test plan. `docs/status.md` updated in 2 to 5 lines.
+- PR description: what, why, test plan. `docs/status.md` updated in 2 to 5 lines, in the same pull request (no record-only pull requests; keep it under 3 KB).
+- Hand-test results the owner reports are written into `docs/manual/<milestone>.md` in the same session.
 - No TODO without an issue.
 
 ## Where to look
 
 - `docs/status.md` - current state and next step. Start here.
-- `docs/plan.md` - milestones and their Definition of Done.
+- `docs/plan.md` - the current and next milestone in detail, closed ones in one line each (under 8 KB). Full old plans: `docs/history/`.
 - `docs/architecture.md` - components and the open technical questions.
-- `docs/manual-testing.md` - how to load the build and what to click, per milestone. Update it when a feature changes.
+- `docs/manual-testing.md` - how to load the build, the test pages, known gaps. `docs/manual/` - one hand-test checklist per milestone (step, expected, result, date); update the right one when a feature changes.
 - `docs/decisions/` - one short file per decision.
 - GitHub Issues - bugs and backlog.
