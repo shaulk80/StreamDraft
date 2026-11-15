@@ -11,7 +11,7 @@ Hand-test results per milestone: `docs/manual/`. Closed milestones: `docs/plan.m
 ## Next
 
 - M6, hardening: the task list is in `docs/plan.md` (7 tasks, including the product-basics check). #21 (`Referer`) is left out of M6.
-- Task 3: storage cleanup (#22). Done: task 1 (flaky smoke checks #31 and #34, fixed in the test; 10 of 10 local runs) and task 2 (version in the popup and Options, About section, README Privacy and Permissions, `docs/store-listing.md`, hand-test group A in `docs/manual/m6.md`).
+- Task 3: storage cleanup (#22). Done: task 1 (flaky smoke checks #31 and #34, fixed in the test; 10 of 10 local runs) and task 2 (version in the popup and Options, About section, README Privacy and Permissions, `docs/store-listing.md`, hand-test group A in `docs/manual/m6.md`, passed by the owner on 2026-11-15).
 
 ## Open
 

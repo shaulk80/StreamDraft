@@ -10,7 +10,7 @@ Summary (132 characters or fewer, the Chrome limit): Download videos from the pa
 
 ## Description
 
-StreamDraft finds the videos and audio a page plays and saves them to your downloads folder. It works in the browser alone: there is no helper program, no account and no server.
+StreamDraft finds the videos and audio on the page you are on and lets you save them to your downloads folder. Nothing is downloaded until you ask for it. It works in the browser alone: there is no helper program, no account and no server.
 
 - Finds direct video and audio files, HLS streams and DASH streams, on any page.
 - Download from the toolbar popup, a button on the video, or the right-click menu.
@@ -32,11 +32,11 @@ Download only what you have the right to download. StreamDraft does not circumve
 - Permission reasons (the store asks for each one): the table in the README, section "Permissions".
 - Source code for the reviewer: the sources zip of the release, built with `.\scripts\build.ps1`.
 
-## Screenshots (not taken yet)
+## Screenshots
 
-Take them from `pnpm run testpage` in Firefox, 1280 by 800, light theme:
+Taken by the owner on 2026-11-15 from `pnpm run testpage` in Firefox (light theme), kept outside the repository (`C:\Vibe\z_tmp\screenshots`, 1 to 4): the popup listing videos, the button on a video, a download in progress with Cancel, the Options page. They are usable for AMO. Before a real listing, retake these:
 
-1. The popup listing the videos of the detection page, with a quality picker.
-2. The button on a video on the overlay page.
-3. A download in progress in the popup, with Cancel.
-4. The Options page.
+- Size: the Chrome Web Store takes only 1280 by 800 or 640 by 400 (PNG without transparency). The four are 935 by 609, 877 by 611 and 951 by 815. AMO takes any size.
+- Download in progress (3): the blank lower half of the window, the test page's text behind the popup ("large stream test page", the stray word "fetched"). Crop it, or use a page that looks like a video page.
+- Options (4): the player capture is ticked with `youtube.com` listed. The capture is off by default and experimental; show the defaults (unticked, empty list).
+- Browser toolbar (1 to 3): other extensions and the profile icon show. Use a clean profile or crop to the page and the popup.
