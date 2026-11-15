@@ -160,4 +160,64 @@ describe('OffscreenEngineHost.receive', () => {
 
     expect(logged).toHaveBeenCalled();
   });
+
+  test('keeps the document open when it says it is idle while a job start is on its way to it', async () => {
+    const { host, api } = setup();
+    api.createDocument.mockImplementation(async () => {
+      // The new document sweeps and reports idle before the start command has been sent.
+      await host.receive({ kind: 'idle' });
+    });
+    api.send.mockResolvedValue({ ok: true, value: 0 });
+
+    const result = await host.start(JOB);
+
+    expect(result).toEqual(ACCEPTED);
+    expect(api.closeDocument).not.toHaveBeenCalled();
+    expect(api.send).toHaveBeenCalledOnce();
+  });
+});
+
+describe('OffscreenEngineHost.sweepLeftovers', () => {
+  const listing = (ids: string[]) => ({ list: () => Promise.resolve({ ok: true as const, value: ids }) });
+
+  test('opens the document to clean up when job folders are left and no document exists', async () => {
+    const { host, api } = setup(false);
+
+    const result = await host.sweepLeftovers(listing(['old']));
+
+    expect(result).toEqual(ACCEPTED);
+    expect(api.createDocument).toHaveBeenCalledOnce();
+  });
+
+  test.each<[string, boolean, string[]]>([
+    ['no job folder is left', false, []],
+    ['a document exists, so a job may be running', true, ['running']],
+  ])('opens nothing when %s', async (_name, hasDocument, ids) => {
+    const { host, api } = setup(hasDocument);
+
+    const result = await host.sweepLeftovers(listing(ids));
+
+    expect(result).toEqual(ACCEPTED);
+    expect(api.createDocument).not.toHaveBeenCalled();
+  });
+
+  test('a listing that fails is reported and opens nothing', async () => {
+    const { host, api } = setup(false);
+
+    const result = await host.sweepLeftovers({ list: () => Promise.resolve({ ok: false as const, error: 'no listing' }) });
+
+    expect(result).toEqual({ ok: false, error: 'no listing' });
+    expect(api.createDocument).not.toHaveBeenCalled();
+  });
+
+  test('a document that cannot be asked about is reported in plain words', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { host, api } = setup(false);
+    api.hasDocument.mockRejectedValue(new Error('no contexts'));
+
+    const result = await host.sweepLeftovers(listing(['old']));
+
+    expect(!result.ok && result.error).toContain('not available');
+    expect(api.createDocument).not.toHaveBeenCalled();
+  });
 });

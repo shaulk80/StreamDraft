@@ -132,6 +132,11 @@ class Page {
     return new Page(browser, sessionId);
   }
 
+  /** Sends a protocol command to the page's session. */
+  command<T = unknown>(method: string, params: object = {}): Promise<T> {
+    return this.browser.send<T>(method, params, this.sessionId);
+  }
+
   /** Runs a JavaScript expression in the page and gives its (JSON) value. */
   async evaluate<T>(expression: string): Promise<T | undefined> {
     const answer = await this.browser.send<{ result: { value?: T }; exceptionDetails?: unknown }>(
@@ -382,6 +387,41 @@ async function checkJobs(browser: CdpConnection, extensionId: string, pageUrl: s
   if (found.length === 0) {
     console.log('Chrome runtime: job display: a slow stream showed its progress (also in a popup opened again) and was cancelled, a stream with a missing part ended with the failure text; a leftover job folder was removed by the next job and none was left after the cancel or the failure');
   }
+}
+
+// A job folder left behind by a closed browser, and no job started afterwards: the engine's document is
+// closed then, so the service worker must open it to clean up when it starts. The worker is stopped and
+// woken again here, which is what a restarted browser does.
+async function checkStartupSweep(browser: CdpConnection, port: number, extensionId: string): Promise<void> {
+  const popup = await Page.open(browser, `chrome-extension://${extensionId}/popup.html`);
+  const storage = new JobStorage((expression) => popup.evaluate<unknown>(expression));
+  const offscreenOpen = async (): Promise<boolean> => (await listTargets(port)).some((target) => target.url === `chrome-extension://${extensionId}/offscreen.html`);
+  const workerRunning = async (): Promise<boolean> => (await listTargets(port)).some((target) => target.url === `chrome-extension://${extensionId}/background.js`);
+
+  const closed = await waitFor(async () => ((await offscreenOpen()) ? undefined : true));
+  const clean = await storage.settleAt(0);
+  if (!closed || clean !== 0 || !(await storage.plantStray())) {
+    problems.push(`chrome runtime: startup sweep: could not start from a quiet state (engine document closed: ${String(closed)}, job folders: ${String(clean)})`);
+    return;
+  }
+
+  await popup.command('ServiceWorker.enable');
+  await popup.command('ServiceWorker.stopAllWorkers');
+  const stopped = await waitFor(async () => ((await workerRunning()) ? undefined : true));
+  if (!stopped) {
+    problems.push('chrome runtime: startup sweep: the service worker could not be stopped');
+    return;
+  }
+
+  // Any message to the extension wakes the worker, which then starts like the first time.
+  await popup.evaluate("chrome.runtime.sendMessage({ type: 'wake' }).then(() => true, () => true)");
+  const left = await storage.settleAt(0);
+  const closedAgain = await waitFor(async () => ((await offscreenOpen()) ? undefined : true));
+  if (left !== 0 || !closedAgain) {
+    problems.push(`chrome runtime: startup sweep: after the worker started again ${String(left)} job folders were left (expected none), engine document closed again: ${String(closedAgain)}`);
+    return;
+  }
+  console.log('Chrome runtime: startup sweep: a job folder left in storage was removed when the stopped service worker started again, and the engine document it opened closed afterwards');
 }
 
 // Opt-in (SMOKE_LARGE=1): a stream of 1.1 GiB is downloaded while the memory of Chrome is sampled.
@@ -659,6 +699,7 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkStreamDownloads(browser, port, extensionId, server.url, downloadDir);
     await checkSilentStream(browser, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);
+    await checkStartupSweep(browser, port, extensionId);
     if (largeCheckEnabled()) {
       await checkLargeStream(browser, extensionId, server.url, downloadDir);
     }

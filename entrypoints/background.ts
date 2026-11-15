@@ -7,7 +7,7 @@ import {
   parseResolveStreamsMessage,
   showTextMessage,
 } from '../src/core/messages.ts';
-import { createBrowserEngine } from '../src/engine/browser-engine.ts';
+import { createBrowserEngine, createBrowserJobFolders } from '../src/engine/browser-engine.ts';
 import { DownloadService } from '../src/engine/download-service.ts';
 import { parseEngineSignalMessage } from '../src/engine/engine-messages.ts';
 import type { EngineEvent, EngineHost } from '../src/engine/engine-types.ts';
@@ -282,6 +282,9 @@ export default defineBackground(() => {
   }
 
   registerDetection();
+
+  // Chrome: the engine's document exists only during a job, so what a closed browser left behind is cleaned up here.
+  void offscreenHost?.sweepLeftovers(createBrowserJobFolders());
 
   // The menu is rebuilt on every start, so it always matches the stored settings.
   void store.load().then((settings) => {

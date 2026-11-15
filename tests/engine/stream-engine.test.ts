@@ -469,6 +469,17 @@ describe('StreamEngine sweep', () => {
     expect(logged).toHaveBeenCalledOnce();
   });
 
+  test('a new engine sweeps and then says it is idle, so a document opened only for it can close', async () => {
+    const { engine, storage, recorder } = setup();
+    await leaveFolders(storage, 'old1', 'old2');
+
+    const swept = await engine.sweepOnStartup();
+
+    expect(swept).toEqual({ ok: true, value: 2 });
+    expect(leftFolders(storage)).toEqual([]);
+    expect(recorder.signals).toEqual([{ kind: 'idle' }]);
+  });
+
   test('a listing that fails is reported', async () => {
     const jobFolders = { list: () => Promise.resolve(fail('no listing')), remove: () => Promise.resolve(ok(undefined)) };
     const { engine } = setup({ jobFolders });

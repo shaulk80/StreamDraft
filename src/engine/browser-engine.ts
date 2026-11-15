@@ -17,6 +17,11 @@ async function openOpfsRoot(): Promise<Result<ListableDirectory>> {
   }
 }
 
+/** The job folders of the extension's OPFS, readable from any context with a file system (the service worker too). */
+export function createBrowserJobFolders(): OpfsJobFolders {
+  return new OpfsJobFolders(openOpfsRoot);
+}
+
 async function openOpfsJobFiles(jobId: string): Promise<Result<JobFiles>> {
   const root = await openOpfsRoot();
   if (!root.ok) {
@@ -29,7 +34,7 @@ async function openOpfsJobFiles(jobId: string): Promise<Result<JobFiles>> {
 export function createBrowserEngine(notify: (signal: EngineSignal) => void): StreamEngine {
   return new StreamEngine({
     openFiles: openOpfsJobFiles,
-    jobFolders: new OpfsJobFolders(openOpfsRoot),
+    jobFolders: createBrowserJobFolders(),
     fetchText: createManifestFetcher((url, init) => fetch(url, init)),
     fetchSegment: createSegmentFetcher((url, init) => fetch(url, init)),
     // A slice of the OPFS file stays on disk; it only carries the type.
