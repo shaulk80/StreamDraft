@@ -51,6 +51,8 @@ const DEFAULT_SCRIPT_TIMEOUT_MS = 30_000;
 /** For calls that answer at once: a call that was lost fails early and is asked again. */
 const SHORT_SCRIPT_TIMEOUT_MS = 5000;
 const SCRIPT_ATTEMPTS = 2;
+/** What the popup and the options page say about the version ("Version unknown" is a failure). */
+const VERSION_LINE = /^Version \d+\.\d+\.\d+$/;
 
 const problems: string[] = [];
 
@@ -870,6 +872,27 @@ async function checkOptionsPage(driver: firefox.Driver): Promise<void> {
   await template.sendKeys('{nope}');
   await driver.wait(until.elementTextContains(driver.findElement(By.id('form-status')), 'Unknown placeholder'), WAIT_MS);
   console.log('Firefox runtime: options page rejects a bad file name template');
+
+  await checkAbout(driver);
+}
+
+// The About section: the version, and the links to the privacy statement and the permissions in the README.
+async function checkAbout(driver: firefox.Driver): Promise<void> {
+  const version = await driver.findElement(By.id('version')).getText();
+  if (!VERSION_LINE.test(version)) {
+    problems.push(`firefox runtime: options: the version line says "${version}"`);
+  }
+
+  for (const [id, anchor] of [
+    ['privacy-link', '#privacy'],
+    ['permissions-link', '#permissions'],
+  ] as const) {
+    const href = (await driver.findElement(By.id(id)).getAttribute('href')) ?? '';
+    if (!href.startsWith('https://github.com/shaulk80/StreamDraft') || !href.endsWith(anchor)) {
+      problems.push(`firefox runtime: options: ${id} points to "${href}"`);
+    }
+  }
+  console.log(`Firefox runtime: options page shows "${version}" and the links to the privacy statement and the permissions`);
 }
 
 async function checkFirefoxRuntime(zipPath: string): Promise<void> {
@@ -909,6 +932,10 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
     const status = driver.findElement(By.id('status'));
     await driver.wait(until.elementTextContains(status, 'ready'), WAIT_MS);
     console.log(`Firefox runtime: popup shows "${await status.getText()}"`);
+    const popupVersion = await driver.findElement(By.id('version')).getText();
+    if (!VERSION_LINE.test(popupVersion)) {
+      problems.push(`firefox runtime: popup: the version line says "${popupVersion}"`);
+    }
 
     await checkPopupList(driver);
     const testPage = await startTestPageServer(0);

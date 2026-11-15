@@ -5,6 +5,7 @@ import type { Result } from '../../src/core/result.ts';
 import type { Settings } from '../../src/core/settings.ts';
 import { isListedSite } from '../../src/core/site-list.ts';
 import { MediaRegistry, registryKey } from '../../src/detect/registry.ts';
+import { versionLabel } from '../../src/ui/about.ts';
 import { backgroundCaptureClient } from '../../src/ui/capture-client.ts';
 import { createCapturePanel } from '../../src/ui/capture-panel.ts';
 import { backgroundCancelAction, backgroundDownloadAction, demoDownloadAction, type DownloadAction } from '../../src/ui/download-client.ts';
@@ -193,6 +194,11 @@ function wireSettingsLink(link: HTMLElement): void {
 const statusElement = document.getElementById('status');
 if (statusElement) {
   void showBackgroundStatus(statusElement);
+}
+
+const versionElement = document.getElementById('version');
+if (versionElement) {
+  versionElement.textContent = versionLabel(browser.runtime.getManifest().version);
 }
 
 const settingsLink = document.getElementById('open-settings');

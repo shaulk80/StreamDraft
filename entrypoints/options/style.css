@@ -35,6 +35,25 @@ small {
   opacity: 0.75;
 }
 
+#about {
+  margin-top: 2rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  font-size: 0.9rem;
+}
+
+#about h2 {
+  font-size: 1rem;
+}
+
+#about p {
+  margin: 0.5rem 0;
+}
+
+#version {
+  opacity: 0.75;
+}
+
 #form-status {
   min-height: 1.25rem;
   margin: 0;

@@ -57,6 +57,7 @@ Downloads go to your normal download folder. The browser never overwrites: a sec
 
 One checklist per milestone, in `docs/manual/`. Each is a record: the steps, and under them what the owner found and when. Do each in Firefox, then in Chrome.
 
+- `docs/manual/m6.md`: hardening, one group per task (product basics first).
 - `docs/manual/m5.md`: install and update from a real release. Repeat for every release.
 - `docs/manual/m4.md`: the player capture experiment, on the test page and on real sites.
 - `docs/manual/m3.md`: HLS, DASH, audio only, progress, large files. Done 2026-11-12 (results table inside); repeat it for a release. The last group, "Real streams", is the only way to learn whether the saved files play in a real player.
