@@ -1,17 +1,14 @@
 import { fail, ok, type Result } from '../../core/result.ts';
-import type { DirectoryHandleLike, FileLike } from '../../engine/opfs-store.ts';
+import type { DirectoryHandleLike, FileLike, ListableDirectory } from '../../engine/opfs-store.ts';
 import type { PartSink, RecordedPart } from './types.ts';
+
+export type { ListableDirectory };
 
 /** The folder of all recordings, inside the page's own private file system. */
 export const CAPTURE_DIRECTORY = 'streamdraft-capture';
 
 /** A recording folder older than this was left by a page that crashed or was killed, and is removed. */
 export const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-/** A directory whose entries can be listed (the real OPFS handle can). */
-export interface ListableDirectory extends DirectoryHandleLike {
-  keys(): AsyncIterable<string>;
-}
 
 /** Which part of which buffer a stored file holds. */
 export interface StoredPartRecord {

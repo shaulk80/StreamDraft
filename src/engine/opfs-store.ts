@@ -29,6 +29,11 @@ export interface DirectoryHandleLike {
   removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
 }
 
+/** A directory whose entries can be listed (the real OPFS handle can). */
+export interface ListableDirectory extends DirectoryHandleLike {
+  keys(): AsyncIterable<string>;
+}
+
 /** The folder of all jobs, inside the origin's private file system. */
 export const JOBS_DIRECTORY = 'streamdraft-jobs';
 

@@ -3,6 +3,7 @@ import type { FetchText } from '../detect/manifest-fetch.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
 import type { EngineJob, EngineSignal, FinishedFile } from './engine-types.ts';
 import { muxStreams, type MuxProgress } from './mux-job.ts';
+import type { JobFolders } from './opfs-job-folders.ts';
 import type { FileLike } from './opfs-store.ts';
 import type { OutputSink } from './output-sink.ts';
 import { planRecording } from './recording-plan.ts';
@@ -27,6 +28,8 @@ export interface JobFiles extends SegmentStore {
 export interface StreamEngineDeps {
   /** Opens (and creates) the folder of a job. */
   openFiles(jobId: string): Promise<Result<JobFiles>>;
+  /** The job folders in storage, for removing those no job of this engine owns. */
+  jobFolders: JobFolders;
   fetchText: FetchText;
   fetchSegment: FetchSegment;
   /** A `blob:` address of the file; `mimeType` is what the browser names and opens the download by. */
@@ -77,8 +80,38 @@ export class StreamEngine {
 
     const entry: HeldJob = { controller: new AbortController() };
     this.held.set(job.jobId, entry);
+    // Whatever an earlier job left behind (a failed removal, a page that was closed) goes before this one grows.
+    void this.sweep();
     void this.run(job, entry);
     return ok(undefined);
+  }
+
+  /**
+   * Removes the job folders no job of this engine holds: what a stopped page, a crash or a failed
+   * removal left behind. A new engine holds nothing, so at its start every folder is such a leftover.
+   * Gives the number of folders removed.
+   */
+  async sweep(): Promise<Result<number>> {
+    const listed = await this.deps.jobFolders.list();
+    if (!listed.ok) {
+      return listed;
+    }
+
+    let removed = 0;
+    for (const jobId of listed.value) {
+      // Checked again for each folder: a job may have been started while the earlier ones were removed.
+      if (this.held.has(jobId)) {
+        continue;
+      }
+
+      const result = await this.deps.jobFolders.remove(jobId);
+      if (result.ok) {
+        removed++;
+      } else {
+        console.error(`StreamDraft: the leftover files of job ${jobId} stay: ${result.error}`);
+      }
+    }
+    return ok(removed);
   }
 
   /** How many jobs the engine holds: running, or finished and waiting to be released. */
@@ -131,12 +164,19 @@ export class StreamEngine {
       return output;
     }
 
-    const joined = await muxStreams(plan.sources, store, output.value, { decryptor, signal: entry.controller.signal, soundOnly: plan.soundOnly, onProgress });
-    if (!joined.ok) {
+    try {
+      const joined = await muxStreams(plan.sources, store, output.value, { decryptor, signal: entry.controller.signal, soundOnly: plan.soundOnly, onProgress });
+      if (!joined.ok) {
+        await output.value.abort();
+        return joined;
+      }
+      return await this.finishOutput(job, entry, output.value, MIME_TYPES[joined.value.extension]);
+    } catch (error) {
+      // An output left open keeps the browser from removing the job's folder.
+      console.error(`StreamDraft: joining ${job.jobId} stopped unexpectedly`, error);
       await output.value.abort();
-      return joined;
+      return fail(UNEXPECTED);
     }
-    return this.finishOutput(job, entry, output.value, MIME_TYPES[joined.value.extension]);
   }
 
   /** A stream: plans the quality and fetches every part into the job's folder. */
