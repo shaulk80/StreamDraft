@@ -11,11 +11,11 @@ Hand-test results per milestone: `docs/manual/`. Closed milestones: `docs/plan.m
 ## Next
 
 - M6, hardening: the task list is in `docs/plan.md` (7 tasks, including the product-basics check). #21 (`Referer`) is left out of M6.
-- Task 1: fix the two flaky Firefox smoke checks (#31, #34) before M6 adds more checks.
+- Task 2: product basics. Task 1 (the flaky Firefox smoke checks #31 and #34) is fixed in the smoke test; 10 of 10 local runs passed, CI has the last word.
 
 ## Open
 
-- Issues: #20 (segment files of an HLS master or multi-period DASH can be listed), #21 (the page's `Referer` is not sent), #22 (2.2 GB left in storage once after a Firefox job), #31 and #34 (flaky Firefox smoke checks).
+- Issues: #20 (segment files of an HLS master or multi-period DASH can be listed), #21 (the page's `Referer` is not sent), #22 (2.2 GB left in storage once after a Firefox job), #31 and #34 (flaky Firefox smoke checks; close them when CI has stayed green for a few runs).
 - Mid-roll ads and real DRM pages with the player capture: not tried, to be learned from real use.
 - Gaps of M1 and M2 (no overlay in iframes or fullscreen, no button for `blob:` addresses, the extension asks for all-sites access): `docs/manual-testing.md`, section 5.
 - Chrome 137 and later ignore `--load-extension`; the Chrome smoke test uses `Extensions.loadUnpacked`. The right-click menu cannot be operated in headless Chrome and is checked in Firefox only.

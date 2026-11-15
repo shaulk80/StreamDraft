@@ -46,6 +46,11 @@ const SAVING = 'Saving as "StreamDraft test page [original]';
 const ADDON_ID = 'streamdraft@shaulk80.github.io';
 const FIXED_UUID = 'f3c2a9e0-6b1d-4d2a-9a55-3b7c1e0d4a10';
 const WAIT_MS = 20_000;
+/** WebDriver's own default for a script call. */
+const DEFAULT_SCRIPT_TIMEOUT_MS = 30_000;
+/** For calls that answer at once: a call that was lost fails early and is asked again. */
+const SHORT_SCRIPT_TIMEOUT_MS = 5000;
+const SCRIPT_ATTEMPTS = 2;
 
 const problems: string[] = [];
 
@@ -113,6 +118,30 @@ async function openInNewTab(driver: firefox.Driver, url: string): Promise<void> 
     return;
   }
   await driver.switchTo().window(newHandle);
+  await waitForPageLoad(driver, url);
+}
+
+// The new tab starts on about:blank. A script started before the address has loaded can be lost
+// with the page that is replaced, and WebDriver then waits for its answer until the script timeout (#34).
+// A page that never gets there is logged, not failed: the checks after it say what is wrong.
+async function waitForPageLoad(driver: firefox.Driver, url: string): Promise<void> {
+  const loaded = async (): Promise<boolean> => {
+    try {
+      return await driver.executeScript<boolean>(
+        "return location.href.split('#')[0] === arguments[0] && document.readyState === 'complete';",
+        url.split('#')[0],
+      );
+    } catch {
+      // The page is being replaced: ask again.
+      return false;
+    }
+  };
+
+  try {
+    await driver.wait(loaded, WAIT_MS);
+  } catch (error) {
+    console.warn(`Firefox runtime: ${url} did not finish loading in ${WAIT_MS} ms: ${String(error)}`);
+  }
 }
 
 // The popup tab is open: it must list the four mock videos, flag the protected
@@ -337,12 +366,49 @@ async function checkPageData(driver: firefox.Driver, pageUrl: string): Promise<v
   const options = `moz-extension://${FIXED_UUID}/options.html`;
   const run = (script: string): Promise<string> =>
     driver.executeAsyncScript<string>(`const done = arguments[arguments.length - 1]; (${script}).then(done);`);
-  const stored = async (): Promise<string> => run(pageDataScript('browser'));
+  // A call can be lost and then answers only at the script timeout (#34). Give calls a short timeout and ask again;
+  // undefined means that no call answered.
+  const stored = async (): Promise<string | undefined> => {
+    for (let attempt = 1; attempt <= SCRIPT_ATTEMPTS; attempt++) {
+      try {
+        return await run(pageDataScript('browser'));
+      } catch (error) {
+        console.warn(`Firefox runtime: page data: read ${attempt} of ${SCRIPT_ATTEMPTS} failed: ${String(error)}`);
+      }
+    }
+    return undefined;
+  };
+  // "Nothing was stored" counts only when the read worked.
+  const storedNothing = async (): Promise<boolean | undefined> => {
+    const value = await stored();
+    return value === undefined ? undefined : !hasPageData(value);
+  };
 
+  await driver.manage().setTimeouts({ script: SHORT_SCRIPT_TIMEOUT_MS });
+  try {
+    await checkPageDataSteps(driver, pageUrl, options, run, stored, storedNothing);
+  } finally {
+    await driver.manage().setTimeouts({ script: DEFAULT_SCRIPT_TIMEOUT_MS });
+  }
+}
+
+async function checkPageDataSteps(
+  driver: firefox.Driver,
+  pageUrl: string,
+  options: string,
+  run: (script: string) => Promise<string>,
+  stored: () => Promise<string | undefined>,
+  storedNothing: () => Promise<boolean | undefined>,
+): Promise<void> {
   await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
   await driver.sleep(NOTHING_HAPPENS_MS);
   await openInNewTab(driver, options);
-  if (hasPageData(await stored())) {
+  const offByDefault = await storedNothing();
+  if (offByDefault === undefined) {
+    problems.push('firefox runtime: page data: the stored data could not be read before the capture was switched on');
+    return;
+  }
+  if (!offByDefault) {
     problems.push('firefox runtime: page data: the page was read although the player capture is off (the default)');
     return;
   }
@@ -351,11 +417,16 @@ async function checkPageData(driver: firefox.Driver, pageUrl: string): Promise<v
   await driver.sleep(SETTING_SETTLE_MS);
   await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
   await openInNewTab(driver, options);
+  // The last answer is kept, so a failure says what the last read showed.
+  let lastProblem: string | undefined;
   try {
-    await driver.wait(async () => pageDataProblem(await stored()) === undefined, WAIT_MS);
+    await driver.wait(async () => {
+      lastProblem = pageDataProblem(await stored());
+      return lastProblem === undefined;
+    }, WAIT_MS);
   } catch (error) {
     console.error(error);
-    problems.push(`firefox runtime: page data: ${String(pageDataProblem(await stored()))}`);
+    problems.push(`firefox runtime: page data: ${String(lastProblem ?? error)}`);
     return;
   }
 
@@ -365,7 +436,12 @@ async function checkPageData(driver: firefox.Driver, pageUrl: string): Promise<v
   await openInNewTab(driver, `${pageUrl}${MAIN_WORLD_PAGE}`);
   await driver.sleep(NOTHING_HAPPENS_MS);
   await openInNewTab(driver, options);
-  if (hasPageData(await stored())) {
+  const offAgain = await storedNothing();
+  if (offAgain === undefined) {
+    problems.push('firefox runtime: page data: the stored data could not be read after the capture was switched off');
+    return;
+  }
+  if (!offAgain) {
     problems.push('firefox runtime: page data: the page was read after the player capture was switched off again');
     return;
   }
@@ -691,11 +767,12 @@ async function openContextMenu(driver: firefox.Driver): Promise<void> {
   await driver.actions().contextClick(driver.findElement(By.id('normal'))).perform();
 }
 
-// Right-clicks the video and says whether Firefox's menu has our entry; with
-// `choose` it also chooses the entry, otherwise the menu is closed again.
-async function rightClickVideo(driver: firefox.Driver, choose: boolean): Promise<boolean> {
-  // The menu takes a moment to open. Wait longer when the entry is expected.
-  const deadline = Date.now() + (choose ? WAIT_MS : 3000);
+/** Time for Firefox's menu to open and show the entry, once. */
+const MENU_OPEN_MS = 3000;
+
+// Opens the menu once and says whether it shows our entry. The menu is left open when the entry is there.
+async function menuShowsEntry(driver: firefox.Driver): Promise<boolean> {
+  const deadline = Date.now() + MENU_OPEN_MS;
   let found = false;
 
   await openContextMenu(driver);
@@ -703,12 +780,30 @@ async function rightClickVideo(driver: firefox.Driver, choose: boolean): Promise
     await driver.sleep(300);
     found = await inChromeContext<boolean>(driver, FIND_ENTRY, MENU_LABEL);
   }
+  if (!found) {
+    await inChromeContext<void>(driver, CLOSE_MENU);
+  }
+  return found;
+}
+
+// Right-clicks the video and says whether Firefox's menu has our entry; with
+// `choose` it also chooses the entry, otherwise the menu is closed again.
+// The background adds or removes the entry after the setting changed, a moment after the
+// options page says "Saved", so the menu is opened again until `patienceMs` has passed.
+async function rightClickVideo(driver: firefox.Driver, choose: boolean, patienceMs = choose ? WAIT_MS : MENU_OPEN_MS): Promise<boolean> {
+  const deadline = Date.now() + patienceMs;
+  let found = await menuShowsEntry(driver);
+  while (!found && Date.now() < deadline) {
+    found = await menuShowsEntry(driver);
+  }
 
   if (found && choose) {
     await inChromeContext<void>(driver, CHOOSE_ENTRY, MENU_LABEL);
     return true;
   }
-  await inChromeContext<void>(driver, CLOSE_MENU);
+  if (found) {
+    await inChromeContext<void>(driver, CLOSE_MENU);
+  }
   return found;
 }
 
@@ -746,7 +841,8 @@ async function checkContextMenu(driver: firefox.Driver, pageUrl: string): Promis
   await toggle.click();
   await driver.wait(async () => (await toggle.isSelected()) === true, WAIT_MS);
   await driver.switchTo().window(pageHandle);
-  if (!(await rightClickVideo(driver, false))) {
+  // The status still says "Saved." from the first click, so it cannot tell when the entry is back: ask the menu.
+  if (!(await rightClickVideo(driver, false, WAIT_MS))) {
     problems.push('firefox runtime: context menu: the entry did not come back after switching it on');
   }
   console.log('Firefox runtime: context menu entry follows the setting');
