@@ -12,8 +12,9 @@ Hand-test results per milestone: `docs/manual/`. Closed milestones: `docs/plan.m
 
 - M6, hardening: the task list is in `docs/plan.md` (7 tasks, including the product-basics check). #21 (`Referer`) is left out of M6.
 - Done: task 1 (flaky smoke checks #31 and #34, fixed in the test; 10 of 10 local runs) and task 2 (version in the popup and Options, About section, README Privacy and Permissions, `docs/store-listing.md`, hand-test group A in `docs/manual/m6.md`, passed by the owner on 2026-11-15).
-- Task 3, storage cleanup (#22): merged (PR #40): the engine sweeps job folders no job holds when it starts and before each job; an output left open by an unexpected error is aborted. Hand-test B passed in Firefox; in Chrome it failed because nothing swept at the browser start (the engine document exists only during a stream job). Fixed in the follow-up PR (service worker opens the document when job folders are left; Chrome smoke check stops and wakes the worker); hand-test B now passes in both browsers, and the PR closes #22. The cause of the original 2.2 GB is still not proven.
-- Next: task 4, errors in plain words, cancel and retry.
+- Task 3, storage cleanup (#22): done (PRs #40, #41); hand-test B passes in both browsers. The cause of the original 2.2 GB is still not proven.
+- Task 4, errors in plain words: in the PR of branch `feat/plain-errors-retry`. All messages are in `src/core/failures.ts` (with the list of those a retry can fix); the job panel offers "Try again"; hand-test C passes in both browsers (Firefox: the popup closes on losing focus, so the error is gone after reopening; accepted). The in-page overlay offers direct files only (a stream element has no qualities there), so it has no job panel; the context-menu toast says only "Saving as..." and never reports a later failure.
+- Next: task 5, segment files listed as videos (#20).
 
 ## Open
 
