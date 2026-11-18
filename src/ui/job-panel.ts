@@ -12,8 +12,9 @@ export interface JobPanel {
 /**
  * `requestCancel` asks the background to stop the job and resolves with whether
  * it could; the button is given back for another try when it could not.
+ * `retry` starts the same download again; without it the panel never offers "Try again".
  */
-export function createJobPanel(doc: Document, requestCancel: () => Promise<boolean>): JobPanel {
+export function createJobPanel(doc: Document, requestCancel: () => Promise<boolean>, retry?: () => void): JobPanel {
   const element = createElement(doc, 'div', 'job');
   const bar = createElement(doc, 'progress', 'job-bar');
   bar.max = 1;
@@ -21,8 +22,10 @@ export function createJobPanel(doc: Document, requestCancel: () => Promise<boole
   text.setAttribute('role', 'status');
   const cancel = createElement(doc, 'button', 'cancel', 'Cancel');
   cancel.type = 'button';
+  const again = createElement(doc, 'button', 'retry', 'Try again');
+  again.type = 'button';
   const line = createElement(doc, 'div', 'job-line');
-  line.append(text, cancel);
+  line.append(text, cancel, again);
   element.append(bar, line);
 
   cancel.addEventListener('click', () => {
@@ -33,10 +36,17 @@ export function createJobPanel(doc: Document, requestCancel: () => Promise<boole
     });
   });
 
+  again.addEventListener('click', () => {
+    // The caller replaces this panel with the new job's; a second click would start it twice.
+    again.disabled = true;
+    retry?.();
+  });
+
   const draw = (description: JobDescription): boolean => {
     text.textContent = description.text;
     text.classList.toggle('error', description.failed);
     cancel.hidden = !description.canCancel;
+    again.hidden = !description.canRetry || retry === undefined;
     // A bar without a value is the browser's "busy" bar.
     if (description.fraction === undefined) {
       bar.removeAttribute('value');
