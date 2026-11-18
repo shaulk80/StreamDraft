@@ -116,8 +116,13 @@ function readTrack(data: Uint8Array, trak: Box): ReadTrack {
   };
 }
 
-/** Reads a flat MP4 the way a player does, from its sample tables. Test oracle, independent of the writer. */
-export function readFlatMp4(data: Uint8Array): ReadFile {
+export type ReadMovie = Omit<ReadFile, 'topLevel' | 'mdat'>;
+
+/**
+ * The `ftyp` and `moov` of a flat MP4. `data` may hold just those two boxes, without the `mdat` between
+ * them: the sample offsets in the tables stay those of the whole file. For files too big to read whole.
+ */
+export function readMovie(data: Uint8Array): ReadMovie {
   const top = readBoxes(data);
   const moov = need(findBox(top, 'moov'), 'moov');
   const ftyp = need(findBox(top, 'ftyp'), 'ftyp');
@@ -125,12 +130,20 @@ export function readFlatMp4(data: Uint8Array): ReadFile {
   const mvhd = need(findBox(parts, 'mvhd'), 'mvhd');
   const view = viewOf(data);
   return {
-    topLevel: top.map((entry) => entry.type),
     brand: textAt(data, ftyp.body, 4),
     movieTimescale: view.getUint32(mvhd.body + 12),
     movieDuration: view.getUint32(mvhd.body + 16),
-    mdat: need(findBox(top, 'mdat'), 'mdat'),
     tracks: parts.filter((part) => part.type === 'trak').map((trak) => readTrack(data, trak)),
+  };
+}
+
+/** Reads a flat MP4 the way a player does, from its sample tables. Test oracle, independent of the writer. */
+export function readFlatMp4(data: Uint8Array): ReadFile {
+  const top = readBoxes(data);
+  return {
+    ...readMovie(data),
+    topLevel: top.map((entry) => entry.type),
+    mdat: need(findBox(top, 'mdat'), 'mdat'),
   };
 }
 

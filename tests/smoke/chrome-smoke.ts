@@ -18,7 +18,8 @@ import {
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { JobStorage } from './job-storage.ts';
-import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
+import { checkLargeDownload, LARGE_CHECK, selectedLargeChecks, type LargeCheck } from './large-stream.ts';
+import { checkLowDisk, lowDiskEnabled, type RoomLimit } from './low-disk.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
 import {
   captureSettingScript,
@@ -425,23 +426,29 @@ async function checkStartupSweep(browser: CdpConnection, port: number, extension
   console.log('Chrome runtime: startup sweep: a job folder left in storage was removed when the stopped service worker started again, and the engine document it opened closed afterwards');
 }
 
-// Opt-in (SMOKE_LARGE=1): a stream of 1.1 GiB is downloaded while the memory of Chrome is sampled.
-async function checkLargeStream(browser: CdpConnection, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
-  const page = await Page.open(browser, `${pageUrl}${LARGE_PAGE}`);
+interface LargePopup {
+  page: Page;
+  popup: PopupPage;
+  storageUsage: () => Promise<number | undefined>;
+}
+
+/** Opens the test page of a large stream, then its popup in a tab; undefined (and a problem noted) when either does not come up. */
+async function openLargePopup(browser: CdpConnection, check: LargeCheck, extensionId: string, pageUrl: string): Promise<LargePopup | undefined> {
+  const page = await Page.open(browser, `${pageUrl}${check.page}`);
   const fetched = await waitFor(async () =>
     (await page.evaluate<string>("document.getElementById('fetch-status')?.textContent ?? ''"))?.includes('fetched') ? true : undefined,
   );
   if (!fetched) {
-    problems.push('chrome runtime: the large stream test page did not finish loading');
-    return;
+    problems.push(`chrome runtime: the ${check.profile.folder} stream test page did not finish loading`);
+    return undefined;
   }
 
-  const pattern = encodeURIComponent(`http://127.0.0.1/${LARGE_PAGE}*`);
+  const pattern = encodeURIComponent(`http://127.0.0.1/${check.page}*`);
   const popupPage = await Page.open(browser, `chrome-extension://${extensionId}/popup.html?tabUrl=${pattern}`);
   const listed = await waitFor(async () => ((await popupPage.evaluate<number>("document.querySelectorAll('#media-list .download').length")) === 1 ? true : undefined));
   if (!listed) {
-    problems.push('chrome runtime: large stream: the popup did not list the stream with qualities');
-    return;
+    problems.push(`chrome runtime: ${check.profile.folder} stream: the popup did not list the stream with qualities`);
+    return undefined;
   }
 
   const popup: PopupPage = {
@@ -452,8 +459,45 @@ async function checkLargeStream(browser: CdpConnection, extensionId: string, pag
     reload: async () => undefined,
   };
   const storageUsage = (): Promise<number | undefined> => popupPage.evaluate<number>('navigator.storage.estimate().then((estimate) => estimate.usage)');
-  const found = await checkLargeDownload('Chrome', popup, path.join(downloadDir, LARGE_FILE_NAME), storageUsage);
-  found.forEach((problem) => problems.push(`chrome runtime: large stream: ${problem}`));
+  return { page: popupPage, popup, storageUsage };
+}
+
+// Opt-in (SMOKE_LARGE=1, huge or all): a stream of 1.1 or 4.5 GiB is downloaded while the memory of Chrome is sampled.
+async function checkLargeStream(browser: CdpConnection, check: LargeCheck, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const opened = await openLargePopup(browser, check, extensionId, pageUrl);
+  if (opened === undefined) {
+    return;
+  }
+  const found = await checkLargeDownload('Chrome', check, opened.popup, path.join(downloadDir, check.fileName), opened.storageUsage);
+  found.forEach((problem) => problems.push(`chrome runtime: ${check.profile.folder} stream: ${problem}`));
+}
+
+/** The room Chrome gives the extension's origin, cut and given back with the quota override of the DevTools protocol. */
+function chromeRoom(page: Page, extensionId: string): RoomLimit {
+  const origin = `chrome-extension://${extensionId}`;
+  const override = async (params: object): Promise<boolean> => {
+    try {
+      await page.command('Storage.overrideQuotaForOrigin', { origin, ...params });
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
+  };
+  return {
+    cut: (bytes) => override({ quotaSize: bytes }),
+    restore: () => override({}),
+  };
+}
+
+// Opt-in (SMOKE_LOW_DISK=1): the room of the extension is cut, a job must fail in plain words and "Try again" must work once it is back.
+async function checkLowDiskStream(browser: CdpConnection, extensionId: string, pageUrl: string, downloadDir: string): Promise<void> {
+  const opened = await openLargePopup(browser, LARGE_CHECK, extensionId, pageUrl);
+  if (opened === undefined) {
+    return;
+  }
+  const found = await checkLowDisk('Chrome', opened.popup, path.join(downloadDir, LARGE_CHECK.fileName), opened.storageUsage, chromeRoom(opened.page, extensionId));
+  found.forEach((problem) => problems.push(`chrome runtime: low disk: ${problem}`));
 }
 
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
@@ -701,8 +745,11 @@ async function runChecks(chromePath: string, extensionDir: string, profileDir: s
     await checkSilentStream(browser, extensionId, server.url, downloadDir);
     await checkJobs(browser, extensionId, server.url);
     await checkStartupSweep(browser, port, extensionId);
-    if (largeCheckEnabled()) {
-      await checkLargeStream(browser, extensionId, server.url, downloadDir);
+    if (lowDiskEnabled()) {
+      await checkLowDiskStream(browser, extensionId, server.url, downloadDir);
+    }
+    for (const check of selectedLargeChecks()) {
+      await checkLargeStream(browser, check, extensionId, server.url, downloadDir);
     }
     await checkOverlay(browser, server.url, downloadDir);
   } catch (error) {

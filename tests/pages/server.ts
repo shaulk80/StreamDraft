@@ -16,6 +16,7 @@ const PAGES: Readonly<Record<string, string>> = {
   '/download.html': 'download.html',
   '/jobs.html': 'jobs.html',
   '/large.html': 'large.html',
+  '/huge.html': 'huge.html',
   '/parts.html': 'parts.html',
   '/silent.html': 'silent.html',
   '/main-world.html': 'main-world.html',
