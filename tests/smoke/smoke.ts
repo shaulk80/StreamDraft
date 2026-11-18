@@ -31,7 +31,7 @@ import {
   SETTING_SETTLE_MS,
 } from './page-data.ts';
 import { checkPlayerCapture, type CaptureSmokeBrowser } from './player-capture.ts';
-import { PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
+import { noticesProblem, PARTS_CARD_COUNT, PARTS_PAGE, partsProblem, registryScript } from './stream-parts.ts';
 
 // Smoke test of the PACKAGES (not the build output folder):
 //   1. extract each zip into an empty folder and check its manifest;
@@ -356,11 +356,12 @@ async function checkStreamParts(driver: firefox.Driver, pageUrl: string): Promis
     return;
   }
   const notices = await driver.executeScript<string[]>("return [...document.querySelectorAll('#media-list .notice')].map((notice) => notice.textContent);");
-  if (notices.length !== 1 || !notices[0]?.includes('Widevine DRM')) {
-    problems.push(`firefox runtime: stream parts: expected one Widevine notice, got ${JSON.stringify(notices)}`);
+  const noticeProblem = noticesProblem(notices);
+  if (noticeProblem !== undefined) {
+    problems.push(`firefox runtime: stream parts: ${noticeProblem}`);
     return;
   }
-  console.log('Firefox runtime: stream parts: the .mp4 segments of two streams are not listed; the protected stream says so; the manifests were read before the popup opened');
+  console.log('Firefox runtime: stream parts: the .mp4 segments of four streams (one HLS master, one with two periods) are not listed; the protected and the two-period stream say so; the manifests were read before the popup opened');
 }
 
 // The player capture is a switch: off, no page gets the MAIN-world script; on for a site, that site's page

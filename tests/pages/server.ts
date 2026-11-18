@@ -51,6 +51,10 @@ const MANIFESTS: Readonly<Record<string, { file: string; contentType: string }>>
   '/streams/manifest.mpd': { file: 'streams/manifest.mpd', contentType: 'application/dash+xml' },
   '/parts/plain.mpd': { file: 'streams/parts-plain.mpd', contentType: 'application/dash+xml' },
   '/parts/drm.mpd': { file: 'streams/parts-drm.mpd', contentType: 'application/dash+xml' },
+  '/parts/periods.mpd': { file: 'streams/parts-periods.mpd', contentType: 'application/dash+xml' },
+  '/parts/hls/master.m3u8': { file: 'streams/parts-hls/master.m3u8', contentType: 'application/vnd.apple.mpegurl' },
+  '/parts/hls/v720/index.m3u8': { file: 'streams/parts-hls/v720.m3u8', contentType: 'application/vnd.apple.mpegurl' },
+  '/parts/hls/v360/index.m3u8': { file: 'streams/parts-hls/v360.m3u8', contentType: 'application/vnd.apple.mpegurl' },
 };
 
 interface MediaFile {
@@ -60,12 +64,24 @@ interface MediaFile {
 
 const KILOBYTE = 1024;
 
-/** The segments of the two streams of /parts.html: separate .mp4 files, as some players' streams are cut. */
+/** Directories below /parts/ with an init.mp4 (if any) and this many segments seg-1.mp4, seg-2.mp4, ... */
+const PARTS_DIRECTORIES: Readonly<Record<string, { segments: number; init: boolean }>> = {
+  plain: { segments: 4, init: true },
+  drm: { segments: 4, init: true },
+  'periods/ad': { segments: 2, init: true },
+  'periods/film': { segments: 4, init: true },
+  'hls/v720': { segments: 3, init: false },
+  'hls/v360': { segments: 3, init: false },
+};
+
+/** The segments of the streams of /parts.html: separate .mp4 files, as some players' streams are cut. */
 function partsFiles(): Record<string, MediaFile> {
   const files: Record<string, MediaFile> = {};
-  for (const directory of ['plain', 'drm']) {
-    files[`/parts/${directory}/init.mp4`] = { contentType: 'video/mp4', sizeBytes: 2 * KILOBYTE };
-    for (let number = 1; number <= 4; number += 1) {
+  for (const [directory, { segments, init }] of Object.entries(PARTS_DIRECTORIES)) {
+    if (init) {
+      files[`/parts/${directory}/init.mp4`] = { contentType: 'video/mp4', sizeBytes: 2 * KILOBYTE };
+    }
+    for (let number = 1; number <= segments; number += 1) {
       files[`/parts/${directory}/seg-${number}.mp4`] = { contentType: 'video/mp4', sizeBytes: 120 * KILOBYTE };
     }
   }

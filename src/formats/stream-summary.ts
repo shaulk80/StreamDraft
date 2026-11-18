@@ -49,12 +49,31 @@ function summarizeHlsMedia(media: HlsMediaPlaylist): Result<StreamDetails> {
   }
 
   // A playlist on its own is one rendition: itself.
-  const segmentUrls = media.segments.flatMap((segment) => (segment.init === undefined ? [segment.url] : [segment.url, segment.init.url]));
   return ok({
     qualities: buildQualityOptions([{ variantId: media.url }], media.totalDurationSeconds),
     protected: false,
-    ...collectParts(segmentUrls),
+    ...collectParts(hlsSegmentUrls(media)),
   });
+}
+
+/** The segment files (and initialisation sections) a media playlist names. */
+export function hlsSegmentUrls(media: HlsMediaPlaylist): string[] {
+  return media.segments.flatMap((segment) => (segment.init === undefined ? [segment.url] : [segment.url, segment.init.url]));
+}
+
+/** What a stream that could not be used gives its item: the reason, and the files it names (they are still its own). */
+export function failedDetails(error: string, segmentUrls: readonly string[] = []): StreamDetails {
+  return { qualities: [], protected: false, manifestError: error, ...(segmentUrls.length === 0 ? {} : collectParts(segmentUrls)) };
+}
+
+/** Adds segment files (those of an HLS master's renditions) to the parts the details already name. */
+export function withSegmentParts(details: StreamDetails, segmentUrls: readonly string[]): StreamDetails {
+  if (segmentUrls.length === 0) {
+    return details;
+  }
+
+  const segments = collectParts(segmentUrls);
+  return { ...details, partUrls: [...(details.partUrls ?? []), ...segments.partUrls], partRuns: [...(details.partRuns ?? []), ...segments.partRuns] };
 }
 
 /** The quality list (or the protection) an HLS playlist gives its item. */

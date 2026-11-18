@@ -97,6 +97,22 @@ export const PLAIN_FILE_MANIFEST = `<MPD type="static" ${NAMESPACE}>
  </Period>
 </MPD>`;
 
+/** Two periods (a 4 s ad, then the 8 s film), each with its own segment files; the first period has no end of its own. */
+export const TWO_PERIOD_MANIFEST = `<MPD type="static" mediaPresentationDuration="PT12S" ${NAMESPACE}>
+ <Period id="ad" start="PT0S" duration="PT4S">
+  <AdaptationSet mimeType="video/mp4">
+   <SegmentTemplate duration="2" media="ad/seg-$Number$.mp4" initialization="ad/init.mp4"/>
+   <Representation id="ad" bandwidth="500000" width="640" height="360"/>
+  </AdaptationSet>
+ </Period>
+ <Period id="film" start="PT4S">
+  <AdaptationSet mimeType="video/mp4">
+   <SegmentTemplate duration="2" media="film/seg-$Number$.mp4" initialization="film/init.mp4"/>
+   <Representation id="film" bandwidth="800000" width="1280" height="720"/>
+  </AdaptationSet>
+ </Period>
+</MPD>`;
+
 /** A manifest whose video adaptation set carries the given content protection elements. */
 export function protectedManifest(protection: string): string {
   return `<MPD type="static" mediaPresentationDuration="PT10S" ${NAMESPACE}>

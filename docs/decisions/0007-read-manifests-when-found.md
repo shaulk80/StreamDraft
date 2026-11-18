@@ -17,6 +17,7 @@ The manifest also names the stream's own files: the playlists of an HLS master's
 ## Consequences
 
 - Segments that arrive before the manifest is read are listed for a moment and dropped when it has been read (the manifest is fetched within milliseconds of being found).
-- Not covered: the segments of an HLS master (they are in the rendition playlists, which are not read until a download), and DASH with several periods (the manifest gives an error). A player that streams from such a source can still fill the list with `.mp4` segments.
+- Added 2026-11-18 (M6 task 5, issue #20): the two gaps this left are closed. For an HLS master the background also reads its rendition playlists (the playlists of the variants and audio renditions, at most 8 per master, one request each, the same host the player uses) and keeps their segment files as parts. For a DASH manifest that cannot be used (several periods, live) the files of every period are kept as parts next to the error message. A rendition that cannot be read adds nothing; the master is still listed.
+- Still not covered: a master with more than 8 renditions (the rest are not recognised), and a period that itself cannot be read.
 - Only a manifest's first sighting starts a read, so a live playlist that a player reloads every few seconds is not fetched again each time.
 - Signed segment addresses are matched without their query.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011" type="static" mediaPresentationDuration="PT12S" minBufferTime="PT2S">
+  <Period id="ad" start="PT0S" duration="PT4S">
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <SegmentTemplate timescale="1000" duration="2000" initialization="periods/ad/init.mp4" media="periods/ad/seg-$Number$.mp4" startNumber="1"/>
+      <Representation id="ad" bandwidth="500000" width="640" height="360" codecs="avc1.42c01e"/>
+    </AdaptationSet>
+  </Period>
+  <Period id="film" start="PT4S">
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <SegmentTemplate timescale="1000" duration="2000" initialization="periods/film/init.mp4" media="periods/film/seg-$Number$.mp4" startNumber="1"/>
+      <Representation id="film" bandwidth="800000" width="1280" height="720" codecs="avc1.42c01e"/>
+    </AdaptationSet>
+  </Period>
+</MPD>

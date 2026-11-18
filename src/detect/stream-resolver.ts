@@ -1,9 +1,9 @@
 import { needsManifest, type MediaItem, type StreamDetails } from '../core/media.ts';
-import { fail, type Result } from '../core/result.ts';
-import { parseDashManifest } from '../formats/dash.ts';
+import { dashSegmentUrlsOfAllPeriods, parseDashManifest } from '../formats/dash.ts';
 import { parseHlsPlaylist } from '../formats/hls.ts';
-import { summarizeDash, summarizeHls } from '../formats/stream-summary.ts';
+import { failedDetails, summarizeDash, summarizeHls, withSegmentParts } from '../formats/stream-summary.ts';
 import type { FetchText } from './manifest-fetch.ts';
+import { readRenditionSegments } from './rendition-reader.ts';
 import type { MediaRegistry, ResolvedStream } from './registry.ts';
 
 /** Most manifests read in one go; a page with more streams than this gets the rest on the next popup opening. */
@@ -51,28 +51,47 @@ export class StreamResolver {
   }
 
   private async resolveItem(item: MediaItem): Promise<ResolvedStream> {
-    const details = await this.readDetails(item);
-    if (details.ok) {
-      return { id: item.id, details: details.value };
-    }
-    return { id: item.id, details: { qualities: [], protected: false, manifestError: details.error } };
+    return { id: item.id, details: await this.readDetails(item) };
   }
 
-  private async readDetails(item: MediaItem): Promise<Result<StreamDetails>> {
+  private async readDetails(item: MediaItem): Promise<StreamDetails> {
     const fetched = await this.fetchText(item.url);
     if (!fetched.ok) {
-      return fetched;
+      return failedDetails(fetched.error);
     }
 
     const { text, url } = fetched.value;
     if (item.kind === 'hls') {
-      const playlist = parseHlsPlaylist(text, url);
-      return playlist.ok ? summarizeHls(playlist.value) : playlist;
+      return this.describeHls(text, url);
     }
     if (item.kind === 'dash') {
-      const manifest = parseDashManifest(text, url);
-      return manifest.ok ? summarizeDash(manifest.value) : manifest;
+      return describeDash(text, url);
     }
-    return fail('This is not a stream.');
+    return failedDetails('This is not a stream.');
   }
+
+  /** An HLS master names only the playlists of its renditions, so these are read for the segment files they name. */
+  private async describeHls(text: string, url: string): Promise<StreamDetails> {
+    const playlist = parseHlsPlaylist(text, url);
+    const summary = playlist.ok ? summarizeHls(playlist.value) : playlist;
+    if (!summary.ok) {
+      return failedDetails(summary.error);
+    }
+
+    const isMaster = playlist.ok && playlist.value.kind === 'master';
+    if (!isMaster || summary.value.protected) {
+      return summary.value;
+    }
+    return withSegmentParts(summary.value, await readRenditionSegments(this.fetchText, summary.value.partUrls ?? []));
+  }
+}
+
+/** A manifest that cannot be downloaded (several periods, live) still names its files, and they are not videos. */
+function describeDash(text: string, url: string): StreamDetails {
+  const manifest = parseDashManifest(text, url);
+  const summary = manifest.ok ? summarizeDash(manifest.value) : manifest;
+  if (summary.ok) {
+    return summary.value;
+  }
+  return failedDetails(summary.error, dashSegmentUrlsOfAllPeriods(text, url));
 }

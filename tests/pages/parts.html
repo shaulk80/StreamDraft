@@ -8,27 +8,40 @@
   <body>
     <h1>StreamDraft stream parts test page</h1>
     <p>
-      The popup should list three videos for this tab: a DASH stream with a 360p quality, a DASH stream that is
-      protected (it says so and offers no download) and the plain file <code>direct.mp4</code>. The page also loads the
-      segments of both streams the way a player does. They are separate <code>.mp4</code> files of 120 KB, served as
-      <code>video/mp4</code>, and must not be listed. The toolbar badge counts 3, also before the popup was opened.
+      The popup should list five videos for this tab: a DASH stream with a 360p quality, a DASH stream that is
+      protected (it says so and offers no download), a DASH stream with two periods (it says that several periods are
+      not supported), an HLS master with 720p and 360p, and the plain file <code>direct.mp4</code>. The page also loads
+      the segments of the streams the way a player does. They are separate <code>.mp4</code> files of 120 KB, served as
+      <code>video/mp4</code>, and must not be listed; for the HLS master they are named only in the rendition playlists.
+      The toolbar badge counts 5, also before the popup was opened.
     </p>
     <p id="fetch-status">waiting</p>
 
     <script>
-      const SEGMENTS = 4;
-
-      async function play(manifest, directory) {
+      // Fetches a stream's manifest, then its files the way a player does.
+      async function play(manifest, directory, segments, withInit) {
         await fetch('/parts/' + manifest);
-        await fetch('/parts/' + directory + '/init.mp4');
-        for (let number = 1; number <= SEGMENTS; number += 1) {
+        if (withInit) {
+          await fetch('/parts/' + directory + '/init.mp4');
+        }
+        for (let number = 1; number <= segments; number += 1) {
           await fetch('/parts/' + directory + '/seg-' + number + '.mp4');
         }
       }
 
       async function load() {
-        await play('plain.mpd', 'plain');
-        await play('drm.mpd', 'drm');
+        await play('plain.mpd', 'plain', 4, true);
+        await play('drm.mpd', 'drm', 4, true);
+
+        // Several periods: the manifest is not supported, but its files are still not videos.
+        await play('periods.mpd', 'periods/ad', 2, true);
+        await play('periods.mpd', 'periods/film', 4, true);
+
+        // An HLS master: its renditions' segments are named only in the rendition playlists.
+        await fetch('/parts/hls/master.m3u8');
+        await play('hls/v720/index.m3u8', 'hls/v720', 3, false);
+        await play('hls/v360/index.m3u8', 'hls/v360', 3, false);
+
         await fetch('/media/direct.mp4');
       }
       load()

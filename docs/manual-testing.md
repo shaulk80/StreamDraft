@@ -43,7 +43,7 @@ Leave it running. Pages, all on `http://127.0.0.1:8123/`:
 | Detection page | `/detect.html` | detection, the popup list, the badge, downloads |
 | Streams page | `/streams.html` | HLS and DASH detection and the quality list (M3) |
 | Silent stream page | `/silent.html` | a stream with a picture and no sound track: "Audio only" must fail with a clear message (M3) |
-| Stream parts page | `/parts.html` | streams cut into `.mp4` segment files, one protected: the segments must not be listed (M3) |
+| Stream parts page | `/parts.html` | streams cut into `.mp4` segment files (plain, protected, two periods, an HLS master): the segments must not be listed, five cards in all (M3, M6) |
 | Stream download page | `/download.html` | two tiny streams with real segments that download (M3) |
 | Job display page | `/jobs.html` | a slow and a broken stream: progress, Cancel, failure text (M3) |
 | Large stream page | `/large.html` | one stream of 1.1 GB, built by the server as it is asked for (M3, large file check) |

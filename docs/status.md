@@ -1,6 +1,6 @@
 # StreamDraft: status
 
-Updated: 2026-11-15. Keep this file under 3 KB. History belongs in git, pull requests and the Releases page, not here.
+Updated: 2026-11-18. Keep this file under 3 KB. History belongs in git, pull requests and the Releases page, not here.
 
 ## Now
 
@@ -14,7 +14,8 @@ Hand-test results per milestone: `docs/manual/`. Closed milestones: `docs/plan.m
 - Done: task 1 (flaky smoke checks #31 and #34, fixed in the test; 10 of 10 local runs) and task 2 (version in the popup and Options, About section, README Privacy and Permissions, `docs/store-listing.md`, hand-test group A in `docs/manual/m6.md`, passed by the owner on 2026-11-15).
 - Task 3, storage cleanup (#22): done (PRs #40, #41); hand-test B passes in both browsers. The cause of the original 2.2 GB is still not proven.
 - Task 4, errors in plain words: in the PR of branch `feat/plain-errors-retry`. All messages are in `src/core/failures.ts` (with the list of those a retry can fix); the job panel offers "Try again"; hand-test C passes in both browsers (Firefox: the popup closes on losing focus, so the error is gone after reopening; accepted). The in-page overlay offers direct files only (a stream element has no qualities there), so it has no job panel; the context-menu toast says only "Saving as..." and never reports a later failure.
-- Next: task 5, segment files listed as videos (#20).
+- Task 5, segment files listed as videos (#20): in the PR of branch `feat/segment-files-hidden`. The background now also reads the rendition playlists of an HLS master (at most 8) and keeps the files of every period of a DASH manifest it cannot use, so their segments are not listed (decision 0007, addendum). `/parts.html` has a case for each; hand-test D waits for the owner.
+- Next: task 6, long videos.
 
 ## Open
 

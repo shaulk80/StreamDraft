@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseDashManifest } from '../../src/formats/dash.ts';
+import { dashSegmentUrlsOfAllPeriods, parseDashManifest } from '../../src/formats/dash.ts';
 import type { DashManifest, DashRepresentation } from '../../src/formats/dash-types.ts';
 import {
   LIST_MANIFEST,
@@ -8,6 +8,7 @@ import {
   PLAIN_FILE_MANIFEST,
   TEMPLATE_MANIFEST,
   TIMELINE_MANIFEST,
+  TWO_PERIOD_MANIFEST,
   protectedManifest,
   templateManifest,
 } from './dash-fixtures.ts';
@@ -190,5 +191,39 @@ describe('errors', () => {
 
   test('an invalid manifest address gives an error', () => {
     expect(parseDashManifest(TEMPLATE_MANIFEST, 'not an address').ok).toBe(false);
+  });
+});
+
+describe('dashSegmentUrlsOfAllPeriods', () => {
+  test('lists the files of every period of a manifest that cannot be downloaded', () => {
+    expect(parseDashManifest(TWO_PERIOD_MANIFEST, MANIFEST_URL).ok).toBe(false);
+
+    const urls = dashSegmentUrlsOfAllPeriods(TWO_PERIOD_MANIFEST, MANIFEST_URL);
+
+    expect(urls).toEqual([
+      `${BASE}ad/init.mp4`,
+      `${BASE}ad/seg-1.mp4`,
+      `${BASE}ad/seg-2.mp4`,
+      `${BASE}film/init.mp4`,
+      `${BASE}film/seg-1.mp4`,
+      `${BASE}film/seg-2.mp4`,
+      `${BASE}film/seg-3.mp4`,
+      `${BASE}film/seg-4.mp4`,
+    ]);
+  });
+
+  test('gives the same files as the parser for a single period', () => {
+    const manifest = parse(TEMPLATE_MANIFEST);
+
+    expect(dashSegmentUrlsOfAllPeriods(TEMPLATE_MANIFEST, MANIFEST_URL)).toEqual(manifest.segmentUrls);
+  });
+
+  test.each([
+    ['text that is not XML', 'hello', MANIFEST_URL],
+    ['another XML document', '<html/>', MANIFEST_URL],
+    ['no period', '<MPD/>', MANIFEST_URL],
+    ['an invalid manifest address', TWO_PERIOD_MANIFEST, 'not an address'],
+  ])('%s gives no files', (_name, text, address) => {
+    expect(dashSegmentUrlsOfAllPeriods(text, address)).toEqual([]);
   });
 });
