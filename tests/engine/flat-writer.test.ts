@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { describe, expect, test } from 'vitest';
 import { fail, ok, type Result } from '../../src/core/result.ts';
 import type { OutputSink } from '../../src/engine/output-sink.ts';
@@ -259,6 +260,6 @@ describe('FlatMp4Writer', () => {
 
     const result = await writer.appendSamples(id, payloadFor(id, 0, list), list, 0);
 
-    expect(result).toEqual(fail('The finished video could not be written. The disk may be full.'));
+    expect(result).toEqual(fail(DISK_FULL));
   });
 });

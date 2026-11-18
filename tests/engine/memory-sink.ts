@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { fail, ok, type Result } from '../../src/core/result.ts';
 import type { OutputSink } from '../../src/engine/output-sink.ts';
 
@@ -14,7 +15,7 @@ export class MemoryOutputSink implements OutputSink {
 
   append(data: Uint8Array): Promise<Result<void>> {
     if (this.failAfterAppends !== undefined && this.appends >= this.failAfterAppends) {
-      return Promise.resolve(fail('The finished video could not be written. The disk may be full.'));
+      return Promise.resolve(fail(DISK_FULL));
     }
     this.appends++;
     this.chunks.push(data.slice());

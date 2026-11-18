@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { fail, ok, type Result } from '../../src/core/result.ts';
 import type { SegmentStore } from '../../src/engine/segment-store.ts';
 
@@ -9,7 +10,7 @@ export class MemorySegmentStore implements SegmentStore {
 
   write(name: string, data: Uint8Array): Promise<Result<number>> {
     if (this.failingWrites.has(name)) {
-      return Promise.resolve(fail('A part of the video could not be stored. The disk may be full.'));
+      return Promise.resolve(fail(DISK_FULL));
     }
     this.segments.set(name, data);
     return Promise.resolve(ok(data.length));

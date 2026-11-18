@@ -1,3 +1,4 @@
+import { httpFailure, NETWORK_FAILED } from '../core/failures.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 
 /** A manifest larger than this is not a manifest (or not worth reading into memory). */
@@ -39,7 +40,8 @@ export function createManifestFetcher(fetchLike: FetchLike, timeoutMs: number = 
     try {
       const response = await fetchLike(url, { credentials: 'include', signal: AbortSignal.timeout(timeoutMs) });
       if (!response.ok) {
-        return fail(`The stream's playlist could not be loaded (the server answered ${response.status}).`);
+        console.error(`StreamDraft: the playlist ${url} answered ${response.status}`);
+        return fail(httpFailure(response.status));
       }
 
       const length = contentLengthOf(response);
@@ -54,7 +56,7 @@ export function createManifestFetcher(fetchLike: FetchLike, timeoutMs: number = 
       return ok({ text, url: response.url === '' ? url : response.url });
     } catch (error) {
       console.error(`StreamDraft: could not load the playlist ${url}`, error);
-      return fail('The stream\'s playlist could not be loaded. Check the connection and try again.');
+      return fail(NETWORK_FAILED);
     }
   };
 }

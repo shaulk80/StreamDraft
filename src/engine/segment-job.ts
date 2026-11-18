@@ -75,7 +75,9 @@ export async function runSegmentJob(
     if (done.ok || done.error === CANCELLED_MESSAGE) {
       return done;
     }
-    return fail(`Segment ${index + 1} of ${total}: ${done.error}`);
+    // The position helps whoever reads the log; the user needs the reason and what to do.
+    console.error(`StreamDraft: part ${index + 1} of ${total} failed: ${done.error}`);
+    return done;
   }
 
   async function worker(): Promise<void> {

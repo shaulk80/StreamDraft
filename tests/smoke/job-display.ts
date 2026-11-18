@@ -115,7 +115,7 @@ export async function checkJobDisplay(popup: PopupPage, storage: JobStorage): Pr
 
   await popup.act(cardButtonScript(BROKEN_CARD, '.download'));
   const failed = await waitForCard(popup, BROKEN_CARD, (view) => view.text.startsWith('Could not save the video.') && !view.downloadDisabled);
-  if (!failed?.text.startsWith('Could not save the video.') || !failed.text.includes('The server answered 404.') || failed.downloadDisabled) {
+  if (!failed?.text.startsWith('Could not save the video.') || !failed.text.includes('no longer has a part of the video') || failed.downloadDisabled) {
     return [`the broken stream did not end with the failure text: ${JSON.stringify(failed)}`];
   }
   const afterFailure = await storage.settleAt(0);

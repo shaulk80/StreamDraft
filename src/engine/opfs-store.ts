@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../core/failures.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import { OpfsOutputSink } from './opfs-sink.ts';
 import type { SegmentStore } from './segment-store.ts';
@@ -81,7 +82,7 @@ export class OpfsSegmentStore implements SegmentStore {
       return ok(data.length);
     } catch (error) {
       console.error(`StreamDraft: could not store ${name}`, error);
-      return fail('A part of the video could not be stored. The disk may be full.');
+      return fail(DISK_FULL);
     }
   }
 

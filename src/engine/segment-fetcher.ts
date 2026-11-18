@@ -1,3 +1,4 @@
+import { httpFailure, NETWORK_FAILED } from '../core/failures.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
 
@@ -118,12 +119,14 @@ export function createSegmentFetcher(fetchLike: SegmentFetchLike, options: Segme
         headers,
       });
       if (!response.ok) {
-        return { result: fail(`The server answered ${response.status}.`), retry: isRetryableStatus(response.status) };
+        console.error(`StreamDraft: ${request.url} answered ${response.status}`);
+        return { result: fail(httpFailure(response.status)), retry: isRetryableStatus(response.status) };
       }
 
       const bytes = wantedPart(new Uint8Array(await response.arrayBuffer()), request.byteRange, response.status);
       if (request.byteRange?.length !== undefined && bytes.length !== request.byteRange.length) {
-        return { result: fail('The server sent an incomplete part of the file.'), retry: true };
+        console.error(`StreamDraft: ${request.url} sent ${bytes.length} bytes of the ${request.byteRange.length} asked for`);
+        return { result: fail(NETWORK_FAILED), retry: true };
       }
       return { result: ok(bytes), retry: false };
     } catch (error) {
@@ -131,7 +134,7 @@ export function createSegmentFetcher(fetchLike: SegmentFetchLike, options: Segme
         return { result: fail(CANCELLED_MESSAGE), retry: false };
       }
       console.error(`StreamDraft: could not fetch ${request.url}`, error);
-      return { result: fail('The connection failed or timed out.'), retry: true };
+      return { result: fail(NETWORK_FAILED), retry: true };
     }
   }
 

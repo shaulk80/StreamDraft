@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import { ADDRESS_EXPIRED, NETWORK_FAILED, PART_GONE, SERVER_BUSY } from '../../src/core/failures.ts';
 import { CANCELLED_MESSAGE } from '../../src/engine/cancelled.ts';
 import {
   createSegmentFetcher,
@@ -63,17 +64,33 @@ describe('createSegmentFetcher', () => {
   });
 
   test.each([
-    ['not found', 404],
-    ['forbidden', 403],
-    ['gone', 410],
-  ])('does not retry when the server says %s', async (_name, status) => {
+    ['not found', 404, PART_GONE],
+    ['gone', 410, PART_GONE],
+    ['forbidden', 403, ADDRESS_EXPIRED],
+    ['unauthorized', 401, ADDRESS_EXPIRED],
+    ['something unexpected', 418, 'The video server answered 418, which StreamDraft cannot use.'],
+  ])('does not retry when the server says %s', async (_name, status, message) => {
     const fetchLike = answering(respond(status));
     const fetchSegment = createSegmentFetcher(fetchLike, { sleep: instantSleep() });
 
     const result = await fetchSegment({ url: URL_A }, new AbortController().signal);
 
-    expect(result).toEqual({ ok: false, error: `The server answered ${status}.` });
+    expect(result).toEqual({ ok: false, error: message });
     expect(fetchLike).toHaveBeenCalledTimes(1);
+  });
+
+  test.each([
+    ['a network error', new TypeError('network'), undefined],
+    ['a body shorter than the asked part', respond(206, [1]), { offset: 0, length: 3 }],
+  ])('says the connection failed when %s keeps happening', async (_name, answer, byteRange) => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const fetchLike = answering(answer, answer);
+    const fetchSegment = createSegmentFetcher(fetchLike, { retries: 1, sleep: instantSleep() });
+
+    const result = await fetchSegment({ url: URL_A, byteRange }, new AbortController().signal);
+
+    expect(result).toEqual({ ok: false, error: NETWORK_FAILED });
+    expect(fetchLike).toHaveBeenCalledTimes(2);
   });
 
   test('gives up after the configured retries and keeps the last reason', async () => {
@@ -82,7 +99,7 @@ describe('createSegmentFetcher', () => {
 
     const result = await fetchSegment({ url: URL_A }, new AbortController().signal);
 
-    expect(result).toEqual({ ok: false, error: 'The server answered 503.' });
+    expect(result).toEqual({ ok: false, error: SERVER_BUSY });
     expect(fetchLike).toHaveBeenCalledTimes(3);
   });
 

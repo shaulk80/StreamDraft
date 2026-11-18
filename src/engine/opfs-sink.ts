@@ -1,8 +1,7 @@
+import { DISK_FULL } from '../core/failures.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import type { OutputSink } from './output-sink.ts';
 import type { DirectoryHandleLike, FileHandleLike, FileLike, WritableLike } from './opfs-store.ts';
-
-const DISK_FULL = 'The finished video could not be written. The disk may be full.';
 
 /** An OPFS file written front to back. It becomes visible when `close` commits it. */
 export class OpfsOutputSink implements OutputSink {

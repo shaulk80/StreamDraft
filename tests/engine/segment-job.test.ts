@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { fail, ok } from '../../src/core/result.ts';
 import { CANCELLED_MESSAGE } from '../../src/engine/cancelled.ts';
 import type { FetchSegment, SegmentRequest } from '../../src/engine/segment-fetcher.ts';
@@ -83,7 +84,7 @@ describe('runSegmentJob', () => {
   });
 
   describe('failure', () => {
-    test('names the failing segment and aborts the others', async () => {
+    test('ends with the reason of the failing segment and aborts the others', async () => {
       const aborted: boolean[] = [];
       const fetchSegment: FetchSegment = async (request, signal) => {
         if (request.url.endsWith('seg1.ts')) {
@@ -96,7 +97,7 @@ describe('runSegmentJob', () => {
 
       const result = await runSegmentJob(requests(4), fetchSegment, new MemorySegmentStore(), { concurrency: 3 });
 
-      expect(result).toEqual({ ok: false, error: 'Segment 2 of 4: The server answered 404.' });
+      expect(result).toEqual({ ok: false, error: 'The server answered 404.' });
       expect(aborted).toEqual([true, true]);
     });
 
@@ -108,7 +109,7 @@ describe('runSegmentJob', () => {
 
       expect(result).toEqual({
         ok: false,
-        error: 'Segment 2 of 3: A part of the video could not be stored. The disk may be full.',
+        error: DISK_FULL,
       });
     });
 

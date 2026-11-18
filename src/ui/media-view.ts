@@ -84,7 +84,7 @@ export function createDownloadRow(
   };
 
   /** Shows the progress of a stream job under the button, which waits until the job ends. */
-  const follow = (tracker: JobsView, jobId: string): void => {
+  const follow = (tracker: JobsView, jobId: string, retry: () => void): void => {
     panel?.remove();
     showResult('', false);
     button.disabled = true;
@@ -96,7 +96,7 @@ export function createDownloadRow(
       }
       return asked.ok;
     };
-    const jobPanel = createJobPanel(doc, requestCancel);
+    const jobPanel = createJobPanel(doc, requestCancel, retry);
     panel = jobPanel.element;
     wrapper.append(panel);
 
@@ -107,7 +107,8 @@ export function createDownloadRow(
     });
   };
 
-  button.addEventListener('click', () => {
+  /** The Download button's work, also what "Try again" does: asks for the picked quality and follows the job. */
+  const start = (): void => {
     const option = item.qualities.find((candidate) => candidate.quality === picker.value);
     if (!option) {
       showResult('Pick a quality first.', true);
@@ -119,20 +120,24 @@ export function createDownloadRow(
     showResult('', false);
     void download(item, option).then((outcome) => {
       if (outcome.ok && outcome.value.jobId !== undefined && jobs !== undefined) {
-        follow(jobs, outcome.value.jobId);
+        follow(jobs, outcome.value.jobId, start);
         return;
       }
+      // A failed job's panel stays until a new job replaces it; a failure to start has none to keep.
+      panel?.remove();
       showResult(outcome.ok ? outcome.value.text : outcome.error, !outcome.ok);
       button.disabled = false;
     });
-  });
+  };
+
+  button.addEventListener('click', start);
 
   row.append(picker, button);
 
   // The popup was closed while a job ran: pick it up again, so it can be watched and stopped.
   const running = jobs?.runningFor(item.id);
   if (jobs !== undefined && running !== undefined) {
-    follow(jobs, running.id);
+    follow(jobs, running.id, start);
   }
   return wrapper;
 }

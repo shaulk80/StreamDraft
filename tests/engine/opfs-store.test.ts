@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { JOBS_DIRECTORY, OpfsSegmentStore } from '../../src/engine/opfs-store.ts';
 import { FakeDirectory } from './fake-opfs.ts';
@@ -57,7 +58,7 @@ describe('OpfsSegmentStore', () => {
 
     const result = await store.write('segment-000000', new Uint8Array([9, 9]));
 
-    expect(result).toEqual({ ok: false, error: 'A part of the video could not be stored. The disk may be full.' });
+    expect(result).toEqual({ ok: false, error: DISK_FULL });
     expect(await store.read('segment-000000')).toEqual({ ok: true, value: new Uint8Array([1]) });
   });
 

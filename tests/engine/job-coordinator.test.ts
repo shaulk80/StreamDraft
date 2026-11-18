@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { NAME_TOO_LONG, NOT_SAVED, NOT_STARTED, SAVE_DENIED, SAVE_NO_SPACE } from '../../src/core/failures.ts';
 import type { MediaItem, QualityOption } from '../../src/core/media.ts';
 import { fail, ok } from '../../src/core/result.ts';
 import { CANCELLED_MESSAGE } from '../../src/engine/cancelled.ts';
@@ -183,10 +184,13 @@ describe('JobCoordinator.handleEvent', () => {
     expect(host.release).toHaveBeenCalledExactlyOnceWith('job1');
   });
 
-  test.each<[string, string | undefined]>([
-    ['the disk or the connection failed', 'FILE_FAILED'],
-    ['no reason is given', undefined],
-  ])('a save interrupted twice (%s) fails the job and cleans up', async (_name, reason) => {
+  test.each<[string, string | undefined, string]>([
+    ['the disk or the connection failed', 'FILE_FAILED', NOT_SAVED],
+    ['no reason is given', undefined, NOT_SAVED],
+    ['there is no room on the disk', 'FILE_NO_SPACE', SAVE_NO_SPACE],
+    ['the folder is not writable', 'FILE_ACCESS_DENIED', SAVE_DENIED],
+    ['the file name is too long', 'FILE_NAME_TOO_LONG', NAME_TOO_LONG],
+  ])('a save interrupted twice (%s) fails the job with words for it and cleans up', async (_name, reason, message) => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { coordinator, states, downloads, host } = setup();
     downloads.download.mockResolvedValueOnce(5).mockResolvedValueOnce(6);
@@ -196,7 +200,7 @@ describe('JobCoordinator.handleEvent', () => {
 
     await coordinator.handleDownloadChange({ id: 6, state: { current: 'interrupted' }, error: { current: reason } });
 
-    expect(await states.load('job1')).toMatchObject({ status: 'failed', error: 'The browser could not save the finished video.' });
+    expect(await states.load('job1')).toMatchObject({ status: 'failed', error: message });
     expect(downloads.download).toHaveBeenCalledTimes(2);
     expect(host.release).toHaveBeenCalledExactlyOnceWith('job1');
   });
@@ -225,7 +229,7 @@ describe('JobCoordinator.handleEvent', () => {
 
     await coordinator.handleDownloadChange({ id: 5, state: { current: 'interrupted' }, error: { current: 'CRASH' } });
 
-    expect(await states.load('job1')).toMatchObject({ status: 'failed', error: 'The browser could not start saving the finished video.' });
+    expect(await states.load('job1')).toMatchObject({ status: 'failed', error: NOT_STARTED });
     expect(host.release).toHaveBeenCalledExactlyOnceWith('job1');
   });
 
@@ -253,7 +257,7 @@ describe('JobCoordinator.handleEvent', () => {
 
     await coordinator.handleEvent({ kind: 'finished', jobId: 'job1', result: ok(FILE) });
 
-    expect(await states.load('job1')).toMatchObject({ status: 'failed', error: 'The browser could not start saving the finished video.' });
+    expect(await states.load('job1')).toMatchObject({ status: 'failed', error: NOT_STARTED });
     expect(host.release).toHaveBeenCalledExactlyOnceWith('job1');
   });
 
