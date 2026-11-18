@@ -156,20 +156,12 @@ function periodDurationOf(root: XmlElement, period: XmlElement): number | undefi
  * message for the popup.
  */
 export function parseDashManifest(text: string, manifestUrl: string): Result<DashManifest> {
-  if (!URL.canParse(manifestUrl)) {
-    return fail(`Not a valid address: ${manifestUrl}`);
+  const parsed = parseRoot(text, manifestUrl);
+  if (!parsed.ok) {
+    return parsed;
   }
 
-  const document = parseXml(text);
-  if (!document.ok) {
-    return fail(`Not a DASH manifest: ${document.error}`);
-  }
-
-  const root = document.value;
-  if (root.name !== 'MPD') {
-    return fail('Not a DASH manifest.');
-  }
-
+  const root = parsed.value;
   const periods = childrenNamed(root, 'Period');
   const period = periods[0];
   if (period === undefined) {
@@ -180,6 +172,42 @@ export function parseDashManifest(text: string, manifestUrl: string): Result<Das
   }
 
   return readPeriod(root, period, manifestUrl);
+}
+
+/**
+ * The files every period of a manifest names (initialisation and media
+ * segments), also when the manifest as a whole cannot be downloaded (several
+ * periods, live). They tell the detection which files are the stream's own.
+ * A period that cannot be read adds nothing; the problem is reported by
+ * `parseDashManifest`, so this gives an empty list for unusable input.
+ */
+export function dashSegmentUrlsOfAllPeriods(text: string, manifestUrl: string): string[] {
+  const parsed = parseRoot(text, manifestUrl);
+  if (!parsed.ok) {
+    return [];
+  }
+
+  const root = parsed.value;
+  return childrenNamed(root, 'Period').flatMap((period) => {
+    const manifest = readPeriod(root, period, manifestUrl);
+    return manifest.ok ? manifest.value.segmentUrls : [];
+  });
+}
+
+function parseRoot(text: string, manifestUrl: string): Result<XmlElement> {
+  if (!URL.canParse(manifestUrl)) {
+    return fail(`Not a valid address: ${manifestUrl}`);
+  }
+
+  const document = parseXml(text);
+  if (!document.ok) {
+    return fail(`Not a DASH manifest: ${document.error}`);
+  }
+
+  if (document.value.name !== 'MPD') {
+    return fail('Not a DASH manifest.');
+  }
+  return ok(document.value);
 }
 
 function readPeriod(root: XmlElement, period: XmlElement, manifestUrl: string): Result<DashManifest> {

@@ -4,7 +4,8 @@ import { fail, ok } from '../../src/core/result.ts';
 import type { FetchText } from '../../src/detect/manifest-fetch.ts';
 import { MediaRegistry, type SessionAreaLike } from '../../src/detect/registry.ts';
 import { MAX_RESOLVED_AT_ONCE, StreamResolver } from '../../src/detect/stream-resolver.ts';
-import { MANIFEST_URL, protectedManifest, TEMPLATE_MANIFEST } from '../formats/dash-fixtures.ts';
+import { MAX_RENDITIONS_READ } from '../../src/detect/rendition-reader.ts';
+import { MANIFEST_URL, protectedManifest, TEMPLATE_MANIFEST, TWO_PERIOD_MANIFEST } from '../formats/dash-fixtures.ts';
 import { BIPBOP_MASTER, FMP4_MASTER, MASTER_URL, MEDIA_URL, BIPBOP_MEDIA } from '../formats/hls-fixtures.ts';
 
 class MemoryArea implements SessionAreaLike {
@@ -120,6 +121,101 @@ describe('StreamResolver.resolveTab', () => {
     await registry.add(1, segment(late));
 
     expect((await registry.list(1)).map((item) => item.id)).toEqual([MANIFEST_URL]);
+  });
+
+  describe('segment files of streams whose files are not named by the manifest itself', () => {
+    const VIDEO_DIR = 'https://cdn.example.com/video/';
+    const RENDITIONS = ['gear1', 'gear3', 'gear0'];
+
+    /** A rendition playlist whose segments are separate .mp4 files named seg-1.mp4, seg-2.mp4, ... */
+    function mp4Playlist(): string {
+      const segments = [1, 2, 3, 4].map((number) => `#EXTINF:4.0,\nseg-${number}.mp4`).join('\n');
+      return `#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:1\n${segments}\n#EXT-X-ENDLIST\n`;
+    }
+
+    const masterTexts = Object.fromEntries([
+      [MASTER_URL, BIPBOP_MASTER],
+      ...RENDITIONS.map((name) => [`${VIDEO_DIR}${name}/prog_index.m3u8`, mp4Playlist()]),
+    ]) as Record<string, string>;
+
+    test.each([
+      ['before', true],
+      ['after', false],
+    ])('the segments of an HLS master\'s renditions that came %s the master was read are not listed', async (_name, early) => {
+      const first = segment(`${VIDEO_DIR}gear1/seg-1.mp4`);
+      const second = segment(`${VIDEO_DIR}gear0/seg-3.mp4`);
+      const { registry, resolver } = await setup(early ? [stream(MASTER_URL, 'hls'), first, second] : [stream(MASTER_URL, 'hls')], masterTexts);
+
+      await resolver.resolveTab(1);
+      if (!early) {
+        await registry.add(1, first);
+        await registry.add(1, second);
+      }
+
+      expect((await registry.list(1)).map((item) => item.id)).toEqual([MASTER_URL]);
+    });
+
+    test('a file next to the segments of a master that the renditions do not name is still listed', async () => {
+      const other = segment(`${VIDEO_DIR}gear1/extra-1.mp4`);
+      const { registry, resolver } = await setup([stream(MASTER_URL, 'hls')], masterTexts);
+      await resolver.resolveTab(1);
+
+      await registry.add(1, other);
+
+      expect((await registry.list(1)).map((item) => item.id)).toEqual([MASTER_URL, other.id]);
+    });
+
+    test('a rendition that cannot be read does not spoil the master or the other renditions', async () => {
+      const texts = { ...masterTexts };
+      Reflect.deleteProperty(texts, `${VIDEO_DIR}gear3/prog_index.m3u8`);
+      const { registry, resolver } = await setup([stream(MASTER_URL, 'hls'), segment(`${VIDEO_DIR}gear1/seg-2.mp4`), segment(`${VIDEO_DIR}gear3/seg-2.mp4`)], texts);
+
+      await resolver.resolveTab(1);
+
+      const items = await registry.list(1);
+      expect(items.map((item) => item.id)).toEqual([MASTER_URL, `${VIDEO_DIR}gear3/seg-2.mp4`]);
+      expect(items[0]?.qualities.length).toBeGreaterThan(0);
+    });
+
+    test('a master is read once and each rendition once, up to the limit', async () => {
+      const many = Array.from({ length: MAX_RENDITIONS_READ + 4 }, (_, index) => `#EXT-X-STREAM-INF:BANDWIDTH=${1000 + index}\nr${index}/index.m3u8`);
+      const master = `#EXTM3U\n${many.join('\n')}\n`;
+      const { resolver, fetchText } = await setup([stream(MASTER_URL, 'hls')], { [MASTER_URL]: master });
+
+      await resolver.resolveTab(1);
+
+      expect(fetchText).toHaveBeenCalledTimes(1 + MAX_RENDITIONS_READ);
+    });
+
+    test('a protected master is not asked for its renditions', async () => {
+      const master = `#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="skd://key",KEYFORMAT="com.apple.streamingkeydelivery"\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nr0/index.m3u8\n`;
+      const { resolver, fetchText } = await setup([stream(MASTER_URL, 'hls')], { [MASTER_URL]: master });
+
+      await resolver.resolveTab(1);
+
+      expect(fetchText).toHaveBeenCalledTimes(1);
+    });
+
+    test.each([
+      ['before', true],
+      ['after', false],
+    ])('the segments of a DASH stream with several periods that came %s the manifest was read are not listed, and the reason stays', async (_name, early) => {
+      const first = segment(`${DASH_DIR}ad/seg-2.mp4`);
+      const second = segment(`${DASH_DIR}film/seg-4.mp4`);
+      const { registry, resolver } = await setup(early ? [stream(MANIFEST_URL, 'dash'), first, second] : [stream(MANIFEST_URL, 'dash')], {
+        [MANIFEST_URL]: TWO_PERIOD_MANIFEST,
+      });
+
+      await resolver.resolveTab(1);
+      if (!early) {
+        await registry.add(1, first);
+        await registry.add(1, second);
+      }
+
+      const items = await registry.list(1);
+      expect(items.map((item) => item.id)).toEqual([MANIFEST_URL]);
+      expect(items[0]?.manifestError).toContain('several periods');
+    });
   });
 
   test('a direct file the manifest does not name is still listed', async () => {
