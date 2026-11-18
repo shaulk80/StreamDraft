@@ -1,37 +1,50 @@
 import { describe, expect, test } from 'vitest';
 import { parseDashManifest } from '../../src/formats/dash.ts';
 import {
+  HUGE,
+  LARGE,
   LARGE_SAMPLES_PER_SEGMENT,
-  LARGE_SEGMENTS,
-  LARGE_STREAM_BYTES,
   LARGE_VIDEO_SAMPLE_BYTES,
+  PROFILES,
   largeSampleFill,
   largeStreamFile,
+  type StreamProfile,
 } from './large-stream.ts';
 
-const BASE = 'http://127.0.0.1/gen/large/';
 const GIB = 1024 * 1024 * 1024;
+const UINT32_RANGE = 0x1_0000_0000;
 
-describe('largeStreamFile', () => {
-  test('the stream is more than 1 GiB', () => {
-    expect(LARGE_STREAM_BYTES).toBeGreaterThan(GIB);
+const cases: [string, StreamProfile][] = PROFILES.map((profile) => [profile.folder, profile]);
+
+describe('the sizes', () => {
+  test('the large stream is more than 1 GiB', () => {
+    expect(LARGE.streamBytes).toBeGreaterThan(GIB);
   });
 
-  test('the manifest lists every segment of a picture and a sound', async () => {
-    const file = largeStreamFile('/gen/large/manifest.mpd');
-    const parsed = parseDashManifest(String(file?.body), `${BASE}manifest.mpd`);
+  test('the huge stream is past what a 32-bit offset can address, with room to spare', () => {
+    expect(HUGE.streamBytes).toBeGreaterThan(UINT32_RANGE + GIB / 4);
+  });
+});
+
+describe.each(cases)('largeStreamFile of the %s stream', (_name, profile) => {
+  const base = `http://127.0.0.1/gen/${profile.folder}/`;
+  const folder = `/gen/${profile.folder}`;
+
+  test('the manifest lists every segment of a picture and a sound', () => {
+    const file = largeStreamFile(`${folder}/manifest.mpd`);
+    const parsed = parseDashManifest(String(file?.body), `${base}manifest.mpd`);
 
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) {
       return;
     }
-    expect(parsed.value.video.map((video) => video.segments.length)).toEqual([LARGE_SEGMENTS]);
-    expect(parsed.value.audio.map((audio) => audio.segments.length)).toEqual([LARGE_SEGMENTS]);
-    expect(parsed.value.video[0]?.segments[1]?.url).toBe(`${BASE}v/seg-2.m4s`);
+    expect(parsed.value.video.map((video) => video.segments.length)).toEqual([profile.segments]);
+    expect(parsed.value.audio.map((audio) => audio.segments.length)).toEqual([profile.segments]);
+    expect(parsed.value.video[0]?.segments[1]?.url).toBe(`${base}v/seg-2.m4s`);
   });
 
   test('a picture segment is built on request, 16 samples of 1 MiB', () => {
-    const file = largeStreamFile('/gen/large/v/seg-2.m4s');
+    const file = largeStreamFile(`${folder}/v/seg-2.m4s`);
     const body = file?.body as Uint8Array;
 
     expect(body.length).toBeGreaterThan(LARGE_SAMPLES_PER_SEGMENT * LARGE_VIDEO_SAMPLE_BYTES);
@@ -40,12 +53,17 @@ describe('largeStreamFile', () => {
     expect(body.at(-1)).toBe(largeSampleFill(2 * LARGE_SAMPLES_PER_SEGMENT - 1));
   });
 
+  test('the last segment exists and the one after it does not', () => {
+    expect(largeStreamFile(`${folder}/a/seg-${profile.segments}.m4s`)).toBeDefined();
+    expect(largeStreamFile(`${folder}/a/seg-${profile.segments + 1}.m4s`)).toBeUndefined();
+  });
+
   test.each([
-    ['a segment past the end', `/gen/large/v/seg-${LARGE_SEGMENTS + 1}.m4s`],
-    ['segment 0', '/gen/large/v/seg-0.m4s'],
-    ['another folder', '/gen/large/x/seg-1.m4s'],
+    ['segment 0', `${folder}/v/seg-0.m4s`],
+    ['another folder', `${folder}/x/seg-1.m4s`],
     ['another stream', '/gen/dash/manifest.mpd'],
-  ])('has nothing for %s', (_name, pathname) => {
+    ['an unknown stream', '/gen/unknown/v/seg-1.m4s'],
+  ])('has nothing for %s', (_label, pathname) => {
     expect(largeStreamFile(pathname)).toBeUndefined();
   });
 });

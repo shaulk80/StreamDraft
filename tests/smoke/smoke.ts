@@ -18,7 +18,8 @@ import {
 } from './stream-download.ts';
 import { checkJobDisplay, JOBS_PAGE, savedTextProblem, type PopupPage } from './job-display.ts';
 import { JobStorage } from './job-storage.ts';
-import { checkLargeDownload, LARGE_FILE_NAME, LARGE_PAGE, largeCheckEnabled } from './large-stream.ts';
+import { checkLargeDownload, LARGE_CHECK, selectedLargeChecks, type LargeCheck } from './large-stream.ts';
+import { checkLowDisk, lowDiskEnabled, type RoomLimit } from './low-disk.ts';
 import { isSilentStreamFile, SILENT_PAGE, silentStreamProblem } from './silent-stream.ts';
 import {
   captureSettingScript,
@@ -577,20 +578,25 @@ async function checkJobs(driver: firefox.Driver, pageUrl: string): Promise<void>
   }
 }
 
-// Opt-in (SMOKE_LARGE=1): a stream of 1.1 GiB is downloaded while the memory of Firefox is sampled.
-async function checkLargeStream(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
-  await openInNewTab(driver, `${pageUrl}${LARGE_PAGE}`);
+interface LargePopup {
+  popup: PopupPage;
+  storageUsage: () => Promise<number | undefined>;
+}
+
+/** Opens the test page of a large stream, then its popup in a tab; undefined (and a problem noted) when the popup lists no stream. */
+async function openLargePopup(driver: firefox.Driver, check: LargeCheck, pageUrl: string): Promise<LargePopup | undefined> {
+  await openInNewTab(driver, `${pageUrl}${check.page}`);
   const status = await driver.wait(until.elementLocated(By.id('fetch-status')), WAIT_MS);
   await driver.wait(until.elementTextContains(status, 'fetched'), WAIT_MS);
 
-  const pattern = encodeURIComponent(`http://127.0.0.1/${LARGE_PAGE}*`);
+  const pattern = encodeURIComponent(`http://127.0.0.1/${check.page}*`);
   await openInNewTab(driver, `moz-extension://${FIXED_UUID}/popup.html?tabUrl=${pattern}`);
   try {
     await driver.wait(async () => (await driver.findElements(By.css('#media-list .download'))).length === 1, WAIT_MS);
   } catch (error) {
     console.error(error);
-    problems.push('firefox runtime: large stream: the popup did not list the stream with qualities');
-    return;
+    problems.push(`firefox runtime: ${check.profile.folder} stream: the popup did not list the stream with qualities`);
+    return undefined;
   }
 
   const popup: PopupPage = {
@@ -602,8 +608,56 @@ async function checkLargeStream(driver: firefox.Driver, pageUrl: string, downloa
   };
   const storageUsage = (): Promise<number | undefined> =>
     driver.executeAsyncScript<number | undefined>('const done = arguments[arguments.length - 1]; navigator.storage.estimate().then((estimate) => done(estimate.usage), () => done(undefined));');
-  const found = await checkLargeDownload('Firefox', popup, path.join(downloadDir, LARGE_FILE_NAME), storageUsage);
-  found.forEach((problem) => problems.push(`firefox runtime: large stream: ${problem}`));
+  return { popup, storageUsage };
+}
+
+// Opt-in (SMOKE_LARGE=1, huge or all): a stream of 1.1 or 4.5 GiB is downloaded while the memory of Firefox is sampled.
+async function checkLargeStream(driver: firefox.Driver, check: LargeCheck, pageUrl: string, downloadDir: string): Promise<void> {
+  const opened = await openLargePopup(driver, check, pageUrl);
+  if (opened === undefined) {
+    return;
+  }
+  const found = await checkLargeDownload('Firefox', check, opened.popup, path.join(downloadDir, check.fileName), opened.storageUsage);
+  found.forEach((problem) => problems.push(`firefox runtime: ${check.profile.folder} stream: ${problem}`));
+}
+
+/** The browser's room for the extension, cut and given back through the preference of the quota manager (browser context). */
+const QUOTA_PREFERENCE = 'dom.quotaManager.temporaryStorage.fixedLimit';
+/** A group (the extension) may use this share of the temporary storage limit, in percent. */
+const GROUP_SHARE_PERCENT = 20;
+
+/** The quota manager reads the limit when its storage starts, so a change needs the storage to start again. */
+const QUOTA_RESTART_MS = 2000;
+
+function firefoxRoom(driver: firefox.Driver): RoomLimit {
+  const inBrowser = async (script: string, ...args: number[]): Promise<boolean> => {
+    await driver.setContext(firefox.Context.CHROME);
+    try {
+      // The quota manager lets a script reset it only in its testing mode.
+      await driver.executeScript(`Services.prefs.setBoolPref('dom.quotaManager.testing', true); ${script} Services.qms.reset();`, ...args);
+      await new Promise((resolve) => setTimeout(resolve, QUOTA_RESTART_MS));
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    } finally {
+      await driver.setContext(firefox.Context.CONTENT);
+    }
+  };
+  return {
+    cut: (bytes) => inBrowser(`Services.prefs.setIntPref('${QUOTA_PREFERENCE}', arguments[0]);`, Math.round(((bytes / 1024) * 100) / GROUP_SHARE_PERCENT)),
+    restore: () => inBrowser(`Services.prefs.clearUserPref('${QUOTA_PREFERENCE}');`),
+  };
+}
+
+// Opt-in (SMOKE_LOW_DISK=1): the room of the extension is cut, a job must fail in plain words and "Try again" must work once it is back.
+async function checkLowDiskStream(driver: firefox.Driver, pageUrl: string, downloadDir: string): Promise<void> {
+  const opened = await openLargePopup(driver, LARGE_CHECK, pageUrl);
+  if (opened === undefined) {
+    return;
+  }
+  const found = await checkLowDisk('Firefox', opened.popup, path.join(downloadDir, LARGE_CHECK.fileName), opened.storageUsage, firefoxRoom(driver));
+  found.forEach((problem) => problems.push(`firefox runtime: low disk: ${problem}`));
 }
 
 // "Audio only" on both cards: the DASH stream has a sound representation of its own, the HLS
@@ -955,8 +1009,11 @@ async function checkFirefoxRuntime(zipPath: string): Promise<void> {
       await checkStreamDownloads(driver, testPage.url, downloadDir);
       await checkSilentStream(driver, testPage.url, downloadDir);
       await checkJobs(driver, testPage.url);
-      if (largeCheckEnabled()) {
-        await checkLargeStream(driver, testPage.url, downloadDir);
+      if (lowDiskEnabled()) {
+        await checkLowDiskStream(driver, testPage.url, downloadDir);
+      }
+      for (const check of selectedLargeChecks()) {
+        await checkLargeStream(driver, check, testPage.url, downloadDir);
       }
     } finally {
       await testPage.close();
