@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { PAGE_GONE } from '../../src/core/failures.ts';
 import { fail, ok, type Result } from '../../src/core/result.ts';
 import { RecordingStore, type ReadUrl } from '../../src/engine/recording-store.ts';
 import { recordingFixture } from './recording-fixtures.ts';
 
-const NOT_READABLE = 'A part of the recording could not be read. The page may have removed it.';
 
 function storeOf(options: { viaUrl: boolean }, readUrl?: ReadUrl) {
   const { recording, served } = recordingFixture(options);
@@ -53,13 +53,13 @@ describe('RecordingStore', () => {
   ])('a part that is not there is an error, not an exception (%s)', async (_name, viaUrl) => {
     const { store } = storeOf({ viaUrl });
 
-    expect(await store.read('nothing')).toEqual({ ok: false, error: NOT_READABLE });
+    expect(await store.read('nothing')).toEqual({ ok: false, error: PAGE_GONE });
   });
 
-  test('an address the browser cannot read passes its reason on', async () => {
+  test('an address the browser cannot read means the page is gone', async () => {
     const { store } = storeOf({ viaUrl: true }, () => Promise.resolve(fail('The connection failed or timed out.')));
 
-    expect(await store.read('v-0')).toEqual({ ok: false, error: 'The connection failed or timed out.' });
+    expect(await store.read('v-0')).toEqual({ ok: false, error: PAGE_GONE });
   });
 
   test('a File that cannot be read is an error, and is logged', async () => {
@@ -69,7 +69,7 @@ describe('RecordingStore', () => {
       () => Promise.resolve(fail('unused')),
     );
 
-    expect(await store.read('init')).toEqual({ ok: false, error: NOT_READABLE });
+    expect(await store.read('init')).toEqual({ ok: false, error: PAGE_GONE });
     expect(log).toHaveBeenCalled();
   });
 

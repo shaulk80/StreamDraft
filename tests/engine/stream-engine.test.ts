@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import { PAGE_GONE, UNEXPECTED } from '../../src/core/failures.ts';
 import type { MediaItem, QualityOption } from '../../src/core/media.ts';
 import { fail, ok, type Result } from '../../src/core/result.ts';
 import { CANCELLED_MESSAGE } from '../../src/engine/cancelled.ts';
@@ -199,7 +200,7 @@ describe('StreamEngine', () => {
 
   test.each<[string, Partial<StreamEngineDeps>, Map<string, Uint8Array> | undefined, string]>([
     ['a manifest that cannot be read', { fetchText: () => Promise.resolve(fail('The stream\'s playlist could not be loaded.')) }, undefined, 'could not be loaded'],
-    ['a part the server does not have', {}, new Map(), 'Segment 1 of 6'],
+    ['a part the server does not have', {}, new Map(), 'answered 404'],
     ['no room for the files', { openFiles: () => Promise.resolve(fail('The browser would not give the extension space.')) }, undefined, 'space'],
   ])('ends with the reason, and nothing is left behind: %s', async (_name, overrides, served, messagePart) => {
     const { engine, files, recorder } = setup(overrides, served);
@@ -233,7 +234,7 @@ describe('StreamEngine', () => {
     engine.start(JOB);
     await recorder.waitFor('idle');
 
-    expect(recorder.finishedResult()).toEqual({ ok: false, error: 'The download stopped unexpectedly.' });
+    expect(recorder.finishedResult()).toEqual({ ok: false, error: UNEXPECTED });
     expect(files.output?.aborted).toBe(true);
     expect(files.cleared).toBe(true);
   });
@@ -269,7 +270,7 @@ describe('StreamEngine', () => {
     engine.start(JOB);
     await recorder.waitFor('idle');
 
-    expect(recorder.finishedResult()).toEqual({ ok: false, error: 'The download stopped unexpectedly.' });
+    expect(recorder.finishedResult()).toEqual({ ok: false, error: UNEXPECTED });
   });
 
   test('releasing an unknown job does nothing but announce that the engine is idle', async () => {
@@ -370,7 +371,7 @@ describe('StreamEngine with a recording', () => {
   });
 
   test.each<[string, (fixture: RecordingFixture) => void, string]>([
-    ['a part the page removed', (fixture) => fixture.served.delete('blob:page/v-1'), 'The server answered 404'],
+    ['a part the page removed', (fixture) => fixture.served.delete('blob:page/v-1'), PAGE_GONE],
     ['a part that is not a video', (fixture) => fixture.served.set('blob:page/v-1', new Uint8Array([1, 2, 3])), ''],
   ])('ends with the reason and nothing is left behind: %s', async (_name, damage, messagePart) => {
     const fixture = recordingFixture({ viaUrl: true });

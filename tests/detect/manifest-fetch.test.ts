@@ -45,8 +45,8 @@ describe('createManifestFetcher', () => {
   });
 
   test.each([
-    ['a refusal', () => Promise.resolve(response({ ok: false, status: 403 })), '403'],
-    ['a network error', () => Promise.reject(new TypeError('NetworkError')), 'Check the connection'],
+    ['a refusal', () => Promise.resolve(response({ ok: false, status: 403 })), 'expired'],
+    ['a network error', () => Promise.reject(new TypeError('NetworkError')), 'Check your internet connection'],
     ['a declared size over the limit', () => Promise.resolve(response({ contentLength: String(MAX_MANIFEST_BYTES + 1) })), 'too large'],
     ['a body over the limit', () => Promise.resolve(response({ text: () => Promise.resolve('x'.repeat(MAX_MANIFEST_BYTES + 1)) })), 'too large'],
   ])('%s gives an error', async (_name, answer, messagePart) => {

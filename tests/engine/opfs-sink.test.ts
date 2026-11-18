@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { OpfsSegmentStore } from '../../src/engine/opfs-store.ts';
 import { OpfsOutputSink } from '../../src/engine/opfs-sink.ts';
@@ -62,7 +63,7 @@ describe('OpfsOutputSink', () => {
 
     expect(await sink.append(new Uint8Array(4))).toEqual({
       ok: false,
-      error: 'The finished video could not be written. The disk may be full.',
+      error: DISK_FULL,
     });
     expect(sink.position).toBe(0);
   });

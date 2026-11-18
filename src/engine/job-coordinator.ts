@@ -1,3 +1,4 @@
+import { NOT_STARTED, saveFailure } from '../core/failures.ts';
 import type { MediaItem, QualityOption } from '../core/media.ts';
 import { ok, type Result } from '../core/result.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
@@ -48,8 +49,6 @@ export interface JobCoordinatorDeps {
 
 const HANDOFF_PREFIX = 'streamdraft.handoff.';
 const USER_CANCELED = 'USER_CANCELED';
-const NOT_SAVED = 'The browser could not save the finished video.';
-const NOT_STARTED = 'The browser could not start saving the finished video.';
 /**
  * How long one save may keep the next one waiting. The trouble (issue #23) is two saves of one file
  * name started in the same instant, not two a few seconds apart, so the next one need not wait for a big
@@ -271,7 +270,8 @@ export class JobCoordinator implements StreamStarter {
     } else if (error === USER_CANCELED) {
       await this.end(jobId, 'cancelled');
     } else {
-      await this.end(jobId, 'failed', NOT_SAVED);
+      console.error(`StreamDraft: the browser could not save the file of job ${jobId} (${String(error)})`);
+      await this.end(jobId, 'failed', saveFailure(error));
     }
     await this.deps.host.release(jobId);
   }

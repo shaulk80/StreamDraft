@@ -1,4 +1,6 @@
+import { PAGE_GONE } from '../core/failures.ts';
 import { fail, ok, type Result } from '../core/result.ts';
+import { CANCELLED_MESSAGE } from './cancelled.ts';
 import { allParts, type RecordingInput, type RecordingPart } from './recording-input.ts';
 import type { SegmentStore } from './segment-store.ts';
 
@@ -6,7 +8,6 @@ import type { SegmentStore } from './segment-store.ts';
 export type ReadUrl = (url: string) => Promise<Result<Uint8Array>>;
 
 const READ_ONLY = 'A recording cannot be changed.';
-const NOT_READABLE = 'A part of the recording could not be read. The page may have removed it.';
 
 /**
  * The parts of a captured recording as a store the muxer reads from. The files
@@ -33,9 +34,9 @@ export class RecordingStore implements SegmentStore {
       return this.readFile(part.file);
     }
     if (part?.url !== undefined) {
-      return this.readUrl(part.url);
+      return this.readAddress(part.url);
     }
-    return fail(NOT_READABLE);
+    return fail(PAGE_GONE);
   }
 
   size(name: string): Promise<number | undefined> {
@@ -46,12 +47,23 @@ export class RecordingStore implements SegmentStore {
     return Promise.resolve(ok(undefined));
   }
 
+  /** A `blob:` address dies with the page that made it: whatever the fetch says, the user's news is that the page is gone. */
+  private async readAddress(url: string): Promise<Result<Uint8Array>> {
+    const read = await this.readUrl(url);
+    if (read.ok || read.error === CANCELLED_MESSAGE) {
+      return read;
+    }
+
+    console.error(`StreamDraft: could not read the recorded part ${url}: ${read.error}`);
+    return fail(PAGE_GONE);
+  }
+
   private async readFile(file: NonNullable<RecordingPart['file']>): Promise<Result<Uint8Array>> {
     try {
       return ok(new Uint8Array(await file.arrayBuffer()));
     } catch (error) {
       console.error('StreamDraft: could not read a recorded part', error);
-      return fail(NOT_READABLE);
+      return fail(PAGE_GONE);
     }
   }
 }

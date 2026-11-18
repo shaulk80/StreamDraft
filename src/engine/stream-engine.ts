@@ -1,3 +1,4 @@
+import { UNEXPECTED } from '../core/failures.ts';
 import { fail, ok, type Result } from '../core/result.ts';
 import type { FetchText } from '../detect/manifest-fetch.ts';
 import { CANCELLED_MESSAGE } from './cancelled.ts';
@@ -60,7 +61,6 @@ interface PreparedJob {
 const OUTPUT_NAME = 'output';
 /** Chrome gives a download of a Blob without a type the extension of a text file. */
 const MIME_TYPES = { mp4: 'video/mp4', m4a: 'audio/mp4' } as const;
-const UNEXPECTED = 'The download stopped unexpectedly.';
 
 /**
  * Downloads a stream in the background of the page it lives in: plans the

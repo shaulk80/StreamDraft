@@ -1,3 +1,4 @@
+import { DISK_FULL } from '../../src/core/failures.ts';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ok } from '../../src/core/result.ts';
@@ -187,7 +188,7 @@ describe('muxStreams with fragmented MP4 sources', () => {
 
     const result = await muxStreams([source], store, sink);
 
-    expect(result).toEqual({ ok: false, error: 'The finished video could not be written. The disk may be full.' });
+    expect(result).toEqual({ ok: false, error: DISK_FULL });
   });
 
   describe('cancel', () => {
