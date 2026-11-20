@@ -1,5 +1,27 @@
 # Release notes
 
+## 0.2.0 (hardening: errors in plain words, storage cleanup, long videos)
+
+No new way to download. This release makes what is there more reliable. Checked by hand in Firefox and Chrome, and with a generated 4.5 GB stream.
+
+- When a download fails, the popup says why in plain words (connection failed, a part of the video is gone, the disk is full, the browser may not write to the folder) and offers "Try again" where a retry can help. Nothing half-written is left in your downloads folder.
+- Leftover temporary files are cleaned up: after a cancelled or failed job, and at the next browser start after a crash (Firefox and Chrome). Fixes #22.
+- The segment files of an HLS master playlist or of a DASH stream with several periods are no longer listed as extra "Direct file" cards. Fixes #20.
+- Long videos: a 4.5 GB stream saves intact in both browsers with flat memory in Firefox (about +85 MB) and about a fifth of the file in Chrome (+936 MB), with storage empty afterwards. A full disk is reported in plain words. Not tried: a real video of an hour or more.
+- The popup and Options show the version, with a plain-words privacy statement and the reason for the all-sites access (also in the README, which now has a Limitations section).
+- Firefox smoke checks were made stable (#31, #34). Internal.
+- Updating: Firefox offers this version as an update to 0.1.1 (`about:addons`, gear, "Check for Updates"). Chrome: unzip the new zip over the folder and reload the extension. The Firefox build is signed by Mozilla as unlisted; the Chrome build is unpacked. `SHA256SUMS.txt` lists the hash of every file.
+
+Known limitations (GitHub issues #21 and #45, and the README, section Limitations):
+
+- The page's `Referer` is not sent, so hosts that check it refuse the download (#21).
+- Firefox: "Try again" is gone when the popup closes (it closes when the browser loses focus); download again from the card.
+- Errors of a later failure show only in the popup, not in the in-page button or the right-click toast.
+- The in-page button appears only for a video whose own address is a recognisable file, not inside iframes and not in fullscreen. The popup still lists what the network observer saw.
+- Live streams and DASH with several periods are listed with a message and not downloaded; protected (DRM) streams are never downloaded.
+- The player capture has not been tried with mid-roll ads or real DRM pages.
+- The extension asks for access to all sites, because detection watches the responses of every page.
+
 ## 0.1.1 (icon and a download fix)
 
 - A new icon, the same in Firefox and Chrome (toolbar button and extensions page). Before, Firefox showed its puzzle-piece placeholder and Chrome a grey letter.
