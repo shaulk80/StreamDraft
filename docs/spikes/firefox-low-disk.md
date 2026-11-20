@@ -24,6 +24,10 @@ The low-disk case of task 6 needs a job to fail with the full-disk words (`DISK_
 2. If a live reset is not usable: start Firefox with the pref in the profile (`options.setPreference(...)` in `tests/smoke/smoke.ts`) in a separate run, test the failure half only, and check the retry half in Chrome and by hand.
 3. Do not spend more than about 20 tool calls; a hand test (a small RAM disk or VHD as the profile drive, needs the owner) is the fallback and goes into `docs/manual/m6.md` group E.
 
+## Outcome (2026-11-20)
+
+The fallback was used: the owner downloaded the 4.5 GB stream to a drive with too little room, in both browsers. Firefox gave the full-disk words, and saved no half file (`docs/manual/m6.md`, group E). The automated Firefox cut stays unsolved and is not needed for `v0.2.0`; pick the steps above up only if the check is wanted in a regular run.
+
 ## State of the rest of task 6 (uncommitted on `feat/long-videos`)
 
 - `tests/pages/large-stream.ts`: two profiles, `large` (1.1 GiB) and `huge` (288 segments, 4.5 GiB, past 4 GiB); `huge.html`; the server route; unit tests per profile pass.
