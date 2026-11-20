@@ -4,7 +4,7 @@ A browser extension that downloads videos from the page you are on. Firefox is t
 
 ## Status
 
-Early development (version 0.x). It finds direct video and audio files (mp4, webm, mp3 and similar), HLS and DASH streams, and downloads them from the popup, the in-page button or the right-click entry. Streams are joined into one MP4 (or an `.m4a` for "Audio only") in the browser. Protected (DRM) streams are listed as protected and are not downloaded. An experimental recorder of the page's own player is built in and is off by default (Options). What works and what does not: `docs/status.md`, and the known issues below.
+Version 0.x, usable but not finished (see Limitations). It finds direct video and audio files (mp4, webm, mp3 and similar), HLS and DASH streams, and downloads them from the popup, the in-page button or the right-click entry. Streams are joined into one MP4 (or an `.m4a` for "Audio only") in the browser. Protected (DRM) streams are listed as protected and are not downloaded. An experimental recorder of the page's own player is built in and is off by default (Options). What works and what does not: `docs/status.md`, and Limitations below.
 
 ## Installing
 
@@ -35,7 +35,7 @@ There is no Chrome store listing and no automatic update.
 StreamDraft collects no data. It has no server, no account, no analytics and no crash reports, and the Firefox manifest says so (`data_collection_permissions: none`).
 
 - **What it looks at.** The headers of the requests a page makes (to find videos), the page's `<video>` and `<audio>` elements, and the page's address and title (for the list and the file name). Only when the experimental player capture is on for a site, it also reads the video the page plays and a variable of the page's own scripts that holds the player data.
-- **What it keeps.** Found videos are kept per tab until the browser closes. The title and progress of each download are kept in the extension's local storage, so the popup can show them. Your settings are kept in the browser's extension storage (`storage.sync`): if you turned on sync in your browser, the browser may sync them with your browser account, as it does for other extensions; StreamDraft itself sends them nowhere. While a stream is being joined, its parts are written to the extension's private browser storage and removed when the job ends or is cancelled (a rare leftover is issue #22).
+- **What it keeps.** Found videos are kept per tab until the browser closes. The title and progress of each download are kept in the extension's local storage, so the popup can show them. Your settings are kept in the browser's extension storage (`storage.sync`): if you turned on sync in your browser, the browser may sync them with your browser account, as it does for other extensions; StreamDraft itself sends them nowhere. While a stream is being joined, its parts are written to the extension's private browser storage and removed when the job ends, fails or is cancelled; whatever a crashed browser leaves behind is removed the next time the browser starts.
 - **What goes over the network.** Requests for the video, its playlist and its segments, to the sites that host them, with the cookies your browser would send to them. Nothing else. Firefox's own check for a newer version is described under Installing.
 - **Where files go.** Into your browser's downloads folder, like any other download.
 
@@ -67,13 +67,22 @@ This installs dependencies, checks licenses, typechecks, lints, runs the tests, 
 
 To try a build by hand (load it in Firefox or Chrome, test pages, checklists), see `docs/manual-testing.md`.
 
-## Known issues
+## Limitations
 
-These are filed as GitHub issues. Fixes are deferred until real-life examples show which ones matter.
+What StreamDraft does not do, so you do not have to find out by trying.
 
-- **Segment files can be listed as videos (#20).** For an HLS master playlist or a DASH stream with several periods, the popup can show up to 50 "Direct file" cards, one per segment, and the real card may be hard to find. Downloading the stream itself is not affected. Fix options: read the rendition playlists of an HLS master in the background, record the segment names of every DASH period, or treat many numbered `.mp4` files from one directory as segments.
-- **The page's `Referer` is not sent (#21).** A host that checks the `Referer` header refuses the manifest read (the card says the playlist could not be loaded) and direct-file downloads; such sites cannot be downloaded from. Cookies are sent. Fix options: set the header for the duration of a job with `declarativeNetRequest` rules, fetch direct files in the extension instead of the downloads API, or only document it.
-- **Storage left behind after a Firefox job (#22).** Once in about 12 runs of the 1.1 GB check, 2.2 GB stayed in the extension's storage after a job. The cause is unknown and it has not been reproduced. The space stays used until the extension's storage is cleared. Fix options: reproduce with repeated large jobs and Cancel at different moments, and clean up leftover job folders when the background starts.
+- **Protected (DRM) streams** are listed as protected and never downloaded.
+- **Live streams and DASH with several periods** (for example with ads) are listed with a message and not downloaded.
+- **The page's `Referer` is not sent (#21).** A host that checks the `Referer` header refuses the manifest read (the card says the playlist could not be loaded) and direct-file downloads; such sites cannot be downloaded from. Cookies are sent. It is planned separately and needs its own decision.
+- **The in-page button** appears only on a video whose own address is a recognisable media file: none for `blob:` addresses, for videos inside iframes or in fullscreen. The popup still lists what the network observer saw.
+- **Cancel** works while the parts are fetched; the last step (joining the parts and handing the file to the browser) cannot be stopped.
+- **An error is shown in the popup.** The in-page button and the right-click entry do not report a failure that happens later; open the popup. Firefox closes the popup when the browser loses focus, so a "Try again" button is gone after you switch tabs: download again from the card.
+- **Long videos** were tested with a generated 4.5 GB stream in both browsers (memory stays flat, storage is empty afterwards, a full disk is reported in plain words). They were not tested with a real video of an hour or more.
+- **Player capture** (experimental, off by default) records what the page plays, so a recording starts at page load, the video has to play through while the tab stays open, quality stops at what H.264 offers (up to 1080p on YouTube), and the recording is lost when the page is left or reloaded.
+- **Access to all sites** is required for detection (see Permissions).
+- **Chrome:** no store listing and no automatic update (see Installing). The right-click entry is checked by hand in Firefox only.
+
+Known issues are filed as [GitHub issues](https://github.com/shaulk80/StreamDraft/issues); fixes are deferred until real-life use shows which ones matter. Details of the gaps: `docs/manual-testing.md`, section 5.
 
 ## Legal
 
